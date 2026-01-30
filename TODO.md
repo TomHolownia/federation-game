@@ -121,14 +121,12 @@
 ## In Progress
 > Tasks currently being worked on. Include agent/branch info.
 
-- [ ] **[FED-001]** Set up Unreal Engine 5 project structure `[P0]` `[S]`
-  - Create new UE5 project with recommended settings
-  - Set up folder structure (Content/Core, Content/Galaxy, etc.)
-  - Enable Large World Coordinates
-  - Configure version control settings (.gitignore, Git LFS)
-  - Acceptance: Project opens, builds, and runs empty scene
-  - **Branch:** feature/FED-001-ue5-project-setup
-  - **Worktree:** ../federation-game-FED-001
+- [ ] **[FED-021]** Restructure UE5 project to repository root `[P0]` `[S]`
+  - Move UE5 project files from federation/ subfolder to root
+  - Add actual UE5 C++ project files (federation module)
+  - Clean up placeholder .gitkeep folders
+  - Acceptance: Project opens and builds from root level
+  - **Branch:** feature/FED-021-ue5-project-restructure
   - **Started:** 2026-01-30
   - **Agent:** Cursor AI
 
@@ -145,6 +143,10 @@
 
 ## Done
 > Completed tasks. Keep last 10-20 for reference.
+
+- [x] **[FED-001]** Set up Unreal Engine 5 project structure `[P0]` `[S]`
+  - **PR:** #6, #8 (merged 2026-01-30)
+  - **Notes:** Created folder structure, setup guide, and actual UE5 project
 
 - [x] **[FED-020]** Create installation guide for contributors `[P1]` `[S]`
   - **PR:** #7 (merged 2026-01-30)
@@ -188,4 +190,4 @@
 ---
 
 ## Task ID Counter
-> Increment this when creating new tasks: **FED-021**
+> Increment this when creating new tasks: **FED-022**
