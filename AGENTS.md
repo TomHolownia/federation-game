@@ -6,7 +6,29 @@
 
 ## Before You Start Working
 
-### 1. Check Your Context
+### 1. ALWAYS Check TODO.md on MAIN Branch First
+
+> **⚠️ CRITICAL: This is your FIRST and HIGHEST priority action. ALWAYS do this before anything else.**
+
+The TODO.md on the `main` branch is the single source of truth for all tasks. You MUST check it first to:
+- See what tasks are available and their priority
+- Avoid duplicating work someone else is doing
+- Understand the current state of the project
+
+```bash
+# ALWAYS fetch and view TODO.md from the main branch first
+git fetch origin main
+git show origin/main:TODO.md
+
+# Or if you're in a worktree, you can also do:
+git show main:TODO.md
+```
+
+- Read through available tasks in the `Ready` section
+- Pick a task from the top of `Ready` (highest priority)
+- Ensure you understand the acceptance criteria before proceeding
+
+### 2. Check Your Context
 ```bash
 # What branch am I on?
 git branch --show-current
@@ -17,11 +39,6 @@ git worktree list
 # What's the current state?
 git status
 ```
-
-### 2. Review the Task Board
-- Open `TODO.md` and read through available tasks
-- Pick a task from the `Ready` section
-- Ensure you understand the acceptance criteria
 
 ### 3. Understand the Codebase
 - Review `README.md` for project overview
