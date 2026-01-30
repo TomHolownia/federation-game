@@ -109,12 +109,6 @@
   - Prevent force pushes to main
   - Acceptance: Cannot merge failing PRs to main
 
-- [ ] **[FED-001]** Set up Unreal Engine 5 project structure `[P0]` `[S]`
-  - Create new UE5 project with recommended settings
-  - Set up folder structure (Content/Core, Content/Galaxy, etc.)
-  - Enable Large World Coordinates
-  - Configure version control settings (.gitignore, Git LFS)
-  - Acceptance: Project opens, builds, and runs empty scene
 
 - [ ] **[FED-004]** Set up automated testing framework `[P0]` `[S]`
   - Configure UE5 Automation Testing
@@ -127,13 +121,14 @@
 ## In Progress
 > Tasks currently being worked on. Include agent/branch info.
 
-- [ ] **[FED-020]** Create installation guide for contributors `[P1]` `[S]`
-  - Document UE5 and Visual Studio installation steps
-  - Explain Git LFS setup
-  - Provide step-by-step getting started guide
-  - Acceptance: New contributors can set up the project following the guide
-  - **Branch:** feature/FED-020-installation-guide
-  - **Worktree:** ../federation-game-FED-020
+- [ ] **[FED-001]** Set up Unreal Engine 5 project structure `[P0]` `[S]`
+  - Create new UE5 project with recommended settings
+  - Set up folder structure (Content/Core, Content/Galaxy, etc.)
+  - Enable Large World Coordinates
+  - Configure version control settings (.gitignore, Git LFS)
+  - Acceptance: Project opens, builds, and runs empty scene
+  - **Branch:** feature/FED-001-ue5-project-setup
+  - **Worktree:** ../federation-game-FED-001
   - **Started:** 2026-01-30
   - **Agent:** Cursor AI
 
@@ -152,6 +147,10 @@
 
 ## Done
 > Completed tasks. Keep last 10-20 for reference.
+
+- [x] **[FED-020]** Create installation guide for contributors `[P1]` `[S]`
+  - **PR:** #7 (merged 2026-01-30)
+  - **Notes:** Created INSTALLATION.md with comprehensive setup guide
 
 - [x] **[FED-014]** Reprioritize tasks - move FED-002/003 to Backlog `[P3]` `[XS]`
   - **Completed:** 2026-01-30
