@@ -127,11 +127,13 @@
 ## In Progress
 > Tasks currently being worked on. Include agent/branch info.
 
-- [ ] **[FED-014]** Reprioritize tasks - move FED-002/003 to Backlog `[P3]` `[XS]`
-  - Move galaxy renderer and camera tasks to Backlog
-  - Mark FED-013 as Done
-  - **Branch:** feature/FED-014-reprioritize-tasks
-  - **Worktree:** ../federation-game-FED-014
+- [ ] **[FED-020]** Create installation guide for contributors `[P1]` `[S]`
+  - Document UE5 and Visual Studio installation steps
+  - Explain Git LFS setup
+  - Provide step-by-step getting started guide
+  - Acceptance: New contributors can set up the project following the guide
+  - **Branch:** feature/FED-020-installation-guide
+  - **Worktree:** ../federation-game-FED-020
   - **Started:** 2026-01-30
   - **Agent:** Cursor AI
 
@@ -150,6 +152,10 @@
 
 ## Done
 > Completed tasks. Keep last 10-20 for reference.
+
+- [x] **[FED-014]** Reprioritize tasks - move FED-002/003 to Backlog `[P3]` `[XS]`
+  - **Completed:** 2026-01-30
+  - **Notes:** Tasks FED-002 and FED-003 moved to Backlog
 
 - [x] **[FED-013]** Improve AI agent workflow enforcement `[P0]` `[S]`
   - **PR:** #2 (merged 2026-01-30)
@@ -185,4 +191,4 @@
 ---
 
 ## Task ID Counter
-> Increment this when creating new tasks: **FED-020**
+> Increment this when creating new tasks: **FED-021**
