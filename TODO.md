@@ -59,18 +59,6 @@
   - Test precision at galaxy scale
   - Write findings to `docs/technical/`
 
----
-
-## Ready
-> Tasks that are refined and ready to be picked up.
-
-- [ ] **[FED-001]** Set up Unreal Engine 5 project structure `[P0]` `[S]`
-  - Create new UE5 project with recommended settings
-  - Set up folder structure (Content/Core, Content/Galaxy, etc.)
-  - Enable Large World Coordinates
-  - Configure version control settings (.gitignore, Git LFS)
-  - Acceptance: Project opens, builds, and runs empty scene
-
 - [ ] **[FED-002]** Create basic galaxy star field renderer `[P1]` `[M]`
   - Implement instanced static mesh for stars
   - Support 10,000+ stars with good performance
@@ -83,6 +71,18 @@
   - Zoom limits (galaxy scale to system scale)
   - Acceptance: Can navigate around galaxy view smoothly
 
+---
+
+## Ready
+> Tasks that are refined and ready to be picked up.
+
+- [ ] **[FED-001]** Set up Unreal Engine 5 project structure `[P0]` `[S]`
+  - Create new UE5 project with recommended settings
+  - Set up folder structure (Content/Core, Content/Galaxy, etc.)
+  - Enable Large World Coordinates
+  - Configure version control settings (.gitignore, Git LFS)
+  - Acceptance: Project opens, builds, and runs empty scene
+
 - [ ] **[FED-004]** Set up automated testing framework `[P0]` `[S]`
   - Configure UE5 Automation Testing
   - Create example unit test
@@ -94,12 +94,11 @@
 ## In Progress
 > Tasks currently being worked on. Include agent/branch info.
 
-- [ ] **[FED-013]** Improve AI agent workflow enforcement `[P0]` `[S]`
-  - Create short Cursor rule with critical non-negotiable steps
-  - Shorten AGENTS.md to reference document
-  - Update TODO.md instructions
-  - **Branch:** feature/FED-013-improve-agent-workflow
-  - **Worktree:** ../federation-game-FED-013
+- [ ] **[FED-014]** Reprioritize tasks - move FED-002/003 to Backlog `[P3]` `[XS]`
+  - Move galaxy renderer and camera tasks to Backlog
+  - Mark FED-013 as Done
+  - **Branch:** feature/FED-014-reprioritize-tasks
+  - **Worktree:** ../federation-game-FED-014
   - **Started:** 2026-01-30
   - **Agent:** Cursor AI
 
@@ -119,11 +118,9 @@
 ## Done
 > Completed tasks. Keep last 10-20 for reference.
 
-<!-- Example:
-- [x] **[FED-XXX]** Task name `[P1]` `[M]`
-  - **PR:** #123 (merged 2026-01-30)
-  - **Notes:** Any relevant notes about implementation
--->
+- [x] **[FED-013]** Improve AI agent workflow enforcement `[P0]` `[S]`
+  - **PR:** #2 (merged 2026-01-30)
+  - **Notes:** Created `.cursor/rules/agent-workflow.mdc` with critical steps, shortened AGENTS.md
 
 ---
 
@@ -154,4 +151,4 @@
 ---
 
 ## Task ID Counter
-> Increment this when creating new tasks: **FED-014**
+> Increment this when creating new tasks: **FED-015**
