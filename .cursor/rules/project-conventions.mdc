@@ -1,0 +1,73 @@
+---
+description: Core project conventions for Federation Game
+globs: **/*
+alwaysApply: true
+---
+
+# Federation Game - Project Conventions
+
+## Project Overview
+Federation Game is a 3D galaxy simulator built with Unreal Engine 5, designed to eventually support large-scale space and ground battles.
+
+## Before Making Changes
+
+1. **Read AGENTS.md** - Contains the complete workflow for AI agents
+2. **Check TODO.md** - The task board for tracking work
+3. **Verify your worktree/branch** - Never work directly on main
+
+## Code Style
+
+### C++ Conventions (UE5)
+- Follow Unreal Engine coding standards
+- Use `UPROPERTY()` and `UFUNCTION()` macros appropriately
+- Prefix classes: `A` for Actors, `U` for UObjects, `F` for structs, `E` for enums
+- Use PascalCase for types and functions, camelCase for variables
+- Always include header guards or `#pragma once`
+
+### Blueprint Conventions
+- Use clear, descriptive names
+- Add comments to complex logic
+- Keep Blueprint graphs organized with Reroute Nodes and Comments
+- Prefer functions over complex macro graphs
+
+## File Organization
+
+```
+Content/
+├── Core/              # Shared utilities, base classes
+├── Galaxy/            # Galaxy-level systems
+├── SolarSystem/       # Solar system scale
+├── Planet/            # Planetary systems
+├── UI/                # User interface assets
+├── Characters/        # Player and NPC characters
+├── Vehicles/          # Ships, ground vehicles
+└── Audio/             # Sound effects, music
+
+Source/
+├── FederationGame/
+│   ├── Core/          # Core utilities
+│   ├── Galaxy/        # Galaxy systems
+│   ├── Combat/        # Combat systems
+│   └── Tests/         # Unit tests
+```
+
+## Testing Requirements
+
+- **All new C++ code must have unit tests**
+- Tests go in `Source/FederationGame/Tests/`
+- Use UE5 Automation Testing framework
+- Test file naming: `Test_<ClassName>.cpp`
+
+## Commit Guidelines
+
+- Reference task ID: `[FED-XXX] Description`
+- Keep commits small and focused
+- Write meaningful commit messages
+
+## Performance Considerations
+
+- This game will handle galaxy-scale data (100,000+ stars)
+- Always consider performance implications
+- Use instancing for repeated geometry
+- Leverage Level Streaming and World Partition
+- Profile before optimizing

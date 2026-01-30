@@ -1,0 +1,88 @@
+# Unreal Engine 5 .gitignore
+
+# Visual Studio
+.vs/
+*.VC.db
+*.VC.VC.opendb
+*.vsconfig
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+# Rider
+.idea/
+
+# macOS
+.DS_Store
+*.dSYM
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Unreal Engine
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+
+# Generated files
+*.generated.h
+*.gen.cpp
+
+# Compiled source
+*.o
+*.obj
+*.pch
+*.pdb
+*.ilk
+*.lib
+*.dll
+*.exe
+*.exp
+
+# Unreal project files (regenerated)
+*.xcworkspace
+*.xcodeproj
+
+# Automation
+/Automation/Reports/
+/Automation/Logs/
+
+# Local configuration
+*.local
+*.user
+
+# Backup files
+*~
+*.bak
+*.swp
+
+# Large files (should be in Git LFS, but ignore if accidentally added)
+# *.uasset  # Tracked by LFS
+# *.umap    # Tracked by LFS
+
+# Documentation build
+docs/_build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+ENV/
+
+# Node (if using any web tools)
+node_modules/
+
+# Logs
+*.log
+
+# Crash reports
+CrashReportClient/
