@@ -46,7 +46,7 @@
 
 - [ ] **[FED-010]** Design inventory system architecture `[P2]` `[M]`
   - Define data structures for items, equipment, weapons
-  - Reference design docs in `gameDocs/`
+  - Reference design docs in `docs/game-design/inventory.md` and `docs/game-design/items.md`
   - Consider weight system from design
 
 - [ ] **[FED-011]** Create star system data model `[P2]` `[M]`
@@ -137,11 +137,9 @@
 ## In Review
 > Tasks with open PRs awaiting review.
 
-<!-- Example:
-- [ ] **[FED-XXX]** Task name `[P1]` `[M]`
-  - **PR:** #123
-  - **Branch:** feature/FED-XXX-task-name
--->
+- [ ] **[FED-020]** Convert game design docs to markdown `[P1]` `[S]`
+  - **PR:** #5
+  - **Branch:** feature/FED-020-game-documentation
 
 ---
 
