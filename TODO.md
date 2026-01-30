@@ -46,7 +46,7 @@
 
 - [ ] **[FED-010]** Design inventory system architecture `[P2]` `[M]`
   - Define data structures for items, equipment, weapons
-  - Reference design docs in `gameDocs/`
+  - Reference design docs in `docs/game-design/inventory.md` and `docs/game-design/items.md`
   - Consider weight system from design
 
 - [ ] **[FED-011]** Create star system data model `[P2]` `[M]`
@@ -127,6 +127,15 @@
 ## In Progress
 > Tasks currently being worked on. Include agent/branch info.
 
+- [ ] **[FED-020]** Convert game design docs to markdown `[P1]` `[S]`
+  - Convert design documents from Google Drive to `docs/game-design/`
+  - Extract content from images (BeingMap.png, Inventory images, etc.)
+  - Create placeholder files for Word documents that need manual conversion
+  - **Branch:** feature/FED-020-game-documentation
+  - **Worktree:** ../federation-game-FED-015
+  - **Started:** 2026-01-30
+  - **Agent:** Cursor AI
+
 - [ ] **[FED-014]** Reprioritize tasks - move FED-002/003 to Backlog `[P3]` `[XS]`
   - Move galaxy renderer and camera tasks to Backlog
   - Mark FED-013 as Done
@@ -185,4 +194,4 @@
 ---
 
 ## Task ID Counter
-> Increment this when creating new tasks: **FED-020**
+> Increment this when creating new tasks: **FED-021**
