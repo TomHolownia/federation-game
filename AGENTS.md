@@ -1,6 +1,6 @@
 # AI Agent Workflow Guide
 
-> Reference document for AI agents. **Critical workflow steps are in `.cursor/rules/agent-workflow.mdc`** - those are always loaded and must be followed.
+> Reference document for AI agents. **Critical workflow steps are in `.cursor/rules/agent-rules.mdc`** - those are always loaded and must be followed.
 
 ---
 
