@@ -1,0 +1,164 @@
+---
+description: Unreal Engine 5 specific guidelines
+globs: 
+  - "**/*.cpp"
+  - "**/*.h"
+  - "**/*.uasset"
+  - "**/*.umap"
+alwaysApply: false
+---
+
+# Unreal Engine 5 Guidelines
+
+## Project Configuration
+
+### Large World Coordinates
+This project uses Large World Coordinates (LWC) for galaxy-scale positioning.
+- Enabled in Project Settings > Engine > General Settings > Enable Large Worlds
+- Use `FVector` (which is now double-precision with LWC)
+- Be aware of precision when converting to/from float
+
+### Recommended Engine Settings
+- Enable World Partition for large levels
+- Use Nanite for complex geometry
+- Enable Lumen for dynamic lighting (or baked for performance)
+
+## C++ Best Practices
+
+### Headers
+```cpp
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "MyActor.generated.h"
+
+UCLASS()
+class FEDERATIONGAME_API AMyActor : public AActor
+{
+    GENERATED_BODY()
+
+public:
+    AMyActor();
+
+protected:
+    virtual void BeginPlay() override;
+
+public:
+    virtual void Tick(float DeltaTime) override;
+
+private:
+    UPROPERTY(EditAnywhere, Category = "Config")
+    float MyValue;
+};
+```
+
+### Memory Management
+- Use `TSharedPtr`, `TWeakPtr`, `TUniquePtr` for non-UObject types
+- UObjects are garbage collected - use `UPROPERTY()` to prevent premature collection
+- Use `NewObject<T>()` to create UObjects
+- Use `CreateDefaultSubobject<T>()` in constructors for components
+
+### Delegates and Events
+- Prefer `DECLARE_DYNAMIC_MULTICAST_DELEGATE` for Blueprint-exposed events
+- Use `DECLARE_MULTICAST_DELEGATE` for C++-only events
+- Always unbind delegates in `EndPlay` or destructors
+
+## Performance Patterns
+
+### Instanced Rendering
+For rendering many similar objects (stars, asteroids):
+```cpp
+UPROPERTY(VisibleAnywhere)
+UInstancedStaticMeshComponent* InstancedMesh;
+
+// Add instances
+FTransform InstanceTransform;
+InstancedMesh->AddInstance(InstanceTransform);
+```
+
+### Async Operations
+```cpp
+AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [this]()
+{
+    // Heavy computation here
+    
+    AsyncTask(ENamedThreads::GameThread, [this]()
+    {
+        // Update game state on game thread
+    });
+});
+```
+
+### Object Pooling
+For frequently spawned/destroyed objects:
+```cpp
+// Deactivate instead of destroy
+Actor->SetActorHiddenInGame(true);
+Actor->SetActorEnableCollision(false);
+Actor->SetActorTickEnabled(false);
+```
+
+## Testing
+
+### Creating Tests
+```cpp
+#include "Misc/AutomationTest.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMyTest,
+    "FederationGame.Core.MyTest",
+    EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+)
+
+bool FMyTest::RunTest(const FString& Parameters)
+{
+    // Arrange
+    int32 Value = 5;
+    
+    // Act
+    int32 Result = Value * 2;
+    
+    // Assert
+    TestEqual("Value should be doubled", Result, 10);
+    
+    return true;
+}
+```
+
+### Running Tests
+- Editor: Window > Developer Tools > Session Frontend > Automation
+- Command Line: `UnrealEditor-Cmd.exe "Project.uproject" -ExecCmds="Automation RunTests"`
+
+## Common Patterns
+
+### Data-Driven Design
+Use Data Assets for configuration:
+```cpp
+UCLASS()
+class UStarSystemData : public UDataAsset
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY(EditAnywhere)
+    FString SystemName;
+
+    UPROPERTY(EditAnywhere)
+    int32 NumPlanets;
+    
+    UPROPERTY(EditAnywhere)
+    FLinearColor StarColor;
+};
+```
+
+### Component-Based Design
+Prefer composition over inheritance:
+```cpp
+// Good: Compose behaviors
+MyActor->AddComponent<UHealthComponent>();
+MyActor->AddComponent<UInventoryComponent>();
+
+// Avoid: Deep inheritance hierarchies
+class APlayerShip : public AShip : public AVehicle : public APawn...
+```

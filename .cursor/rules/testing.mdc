@@ -1,0 +1,220 @@
+---
+description: Testing requirements and patterns
+globs:
+  - "**/*Test*.cpp"
+  - "**/Tests/**"
+alwaysApply: false
+---
+
+# Testing Guidelines
+
+## Core Principles
+
+1. **All new code must have tests** - No exceptions for C++ code
+2. **Write tests first when practical** - TDD helps design better APIs
+3. **Tests are documentation** - They show how code should be used
+4. **Fast tests > slow tests** - Unit tests should run in milliseconds
+
+## Test Organization
+
+```
+Source/FederationGame/Tests/
+├── Core/
+│   ├── Test_MathUtils.cpp
+│   └── Test_DataStructures.cpp
+├── Galaxy/
+│   ├── Test_StarSystem.cpp
+│   └── Test_GalaxyGenerator.cpp
+└── Combat/
+    └── Test_DamageCalculation.cpp
+```
+
+## Naming Conventions
+
+- Test files: `Test_<ClassOrFeature>.cpp`
+- Test names: `<Category>.<Subcategory>.<TestName>`
+- Test functions should describe what they test
+
+```cpp
+// Good names
+"FederationGame.Galaxy.StarSystem.GeneratesCorrectNumberOfPlanets"
+"FederationGame.Combat.Damage.AppliesArmorReduction"
+
+// Bad names
+"FederationGame.Test1"
+"FederationGame.StarSystemTest"
+```
+
+## Test Structure (AAA Pattern)
+
+```cpp
+bool FMyTest::RunTest(const FString& Parameters)
+{
+    // Arrange - Set up test data
+    UStarSystem* System = NewObject<UStarSystem>();
+    System->SetSeed(12345);
+    
+    // Act - Perform the action
+    System->Generate();
+    
+    // Assert - Verify the results
+    TestEqual("Should have planets", System->GetPlanetCount(), 5);
+    TestTrue("Should have a star", System->HasStar());
+    
+    return true;
+}
+```
+
+## What to Test
+
+### Must Test
+- Public API methods
+- Edge cases (empty, null, max values)
+- Error conditions
+- State transitions
+- Calculations and algorithms
+
+### May Skip
+- Simple getters/setters
+- Trivial constructors
+- Platform-specific code (test manually)
+- UI layout (visual testing preferred)
+
+## Test Types
+
+### Unit Tests (Primary)
+- Test single classes/functions in isolation
+- Mock dependencies when needed
+- Should run in < 100ms each
+
+```cpp
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FDamageCalculationTest,
+    "FederationGame.Combat.Damage.BasicCalculation",
+    EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+)
+```
+
+### Integration Tests
+- Test multiple systems together
+- May use real dependencies
+- Can be slower
+
+```cpp
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FGalaxyIntegrationTest,
+    "FederationGame.Integration.Galaxy.FullGeneration",
+    EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter | EAutomationTestFlags::MediumPriority
+)
+```
+
+### Functional Tests
+- Test complete features end-to-end
+- May require game running
+- Use for critical paths
+
+## Assertions Reference
+
+```cpp
+// Equality
+TestEqual("Description", Actual, Expected);
+TestNotEqual("Description", Value1, Value2);
+
+// Boolean
+TestTrue("Description", Condition);
+TestFalse("Description", Condition);
+
+// Null
+TestNull("Description", Pointer);
+TestNotNull("Description", Pointer);
+
+// Validity
+TestValid("Description", WeakPtr);
+TestInvalid("Description", WeakPtr);
+
+// Floating point (with tolerance)
+TestEqual("Description", Actual, Expected, Tolerance);
+
+// Strings
+TestEqual("Description", ActualString, ExpectedString);
+```
+
+## Testing Async Code
+
+```cpp
+bool FAsyncTest::RunTest(const FString& Parameters)
+{
+    // Start async operation
+    bool bCompleted = false;
+    
+    MyAsyncFunction([&bCompleted]()
+    {
+        bCompleted = true;
+    });
+    
+    // Wait for completion (with timeout)
+    ADD_LATENT_AUTOMATION_COMMAND(FWaitForCondition([&bCompleted]() 
+    { 
+        return bCompleted; 
+    }, 5.0f)); // 5 second timeout
+    
+    ADD_LATENT_AUTOMATION_COMMAND(FDelayedFunctionLatentCommand([this]()
+    {
+        TestTrue("Should have completed", bCompleted);
+    }));
+    
+    return true;
+}
+```
+
+## Mocking
+
+For complex dependencies, create test doubles:
+
+```cpp
+// Interface
+class IDataProvider
+{
+public:
+    virtual TArray<FStarData> GetStars() = 0;
+};
+
+// Real implementation
+class UDatabaseDataProvider : public UObject, public IDataProvider
+{
+    // ... actual database calls
+};
+
+// Test mock
+class FMockDataProvider : public IDataProvider
+{
+public:
+    TArray<FStarData> MockedStars;
+    
+    virtual TArray<FStarData> GetStars() override
+    {
+        return MockedStars;
+    }
+};
+```
+
+## Running Tests
+
+### From Editor
+1. Window > Developer Tools > Session Frontend
+2. Go to Automation tab
+3. Filter by "FederationGame"
+4. Click Start
+
+### From Command Line
+```bash
+# Run all project tests
+UnrealEditor-Cmd.exe "FederationGame.uproject" -ExecCmds="Automation RunTests FederationGame" -Unattended -NullRHI
+
+# Run specific test category
+UnrealEditor-Cmd.exe "FederationGame.uproject" -ExecCmds="Automation RunTests FederationGame.Galaxy" -Unattended -NullRHI
+```
+
+## Continuous Integration
+
+Tests should run on every PR. Example GitHub Actions workflow in `.github/workflows/tests.yml`.
