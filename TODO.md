@@ -59,6 +59,26 @@
   - Test precision at galaxy scale
   - Write findings to `docs/technical/`
 
+- [ ] **[FED-017]** Add code coverage reporting `[P1]` `[S]`
+  - Research UE5-compatible coverage tools (OpenCppCoverage, llvm-cov)
+  - Integrate coverage report generation into CI
+  - Set up coverage badge or dashboard
+  - Acceptance: Coverage percentage visible on PRs
+
+- [ ] **[FED-018]** Set up static code analysis `[P1]` `[M]`
+  - Evaluate options: SonarCloud vs PVS-Studio vs Clang-Tidy
+  - SonarCloud: C++ requires paid plan, good dashboard
+  - PVS-Studio: Excellent UE5 support, free for open-source
+  - Clang-Tidy: Free, UE5-compatible, can run in CI
+  - Integrate chosen tool into CI pipeline
+  - Acceptance: Static analysis runs on PRs, blocks on critical issues
+
+- [ ] **[FED-019]** Document CI/CD pipeline and agent merge policy `[P1]` `[S]`
+  - Document when agents can/cannot merge PRs
+  - Define required checks and approval workflows
+  - Add to AGENTS.md or create separate CI docs
+  - Acceptance: Clear policy for automated merging
+
 - [ ] **[FED-002]** Create basic galaxy star field renderer `[P1]` `[M]`
   - Implement instanced static mesh for stars
   - Support 10,000+ stars with good performance
@@ -75,6 +95,19 @@
 
 ## Ready
 > Tasks that are refined and ready to be picked up.
+
+- [ ] **[FED-015]** Set up GitHub Actions CI pipeline `[P0]` `[M]`
+  - Create workflow for building UE5 project
+  - Run UE5 Automation Tests on PR
+  - Consider self-hosted runner requirements (UE5 is ~50GB)
+  - Document CI setup in `docs/technical/ci-setup.md`
+  - Acceptance: PRs trigger build + test, status checks visible
+
+- [ ] **[FED-016]** Configure branch protection rules `[P0]` `[XS]`
+  - Require CI checks to pass before merge
+  - Require at least 1 approval (can be relaxed for docs-only changes)
+  - Prevent force pushes to main
+  - Acceptance: Cannot merge failing PRs to main
 
 - [ ] **[FED-001]** Set up Unreal Engine 5 project structure `[P0]` `[S]`
   - Create new UE5 project with recommended settings
@@ -141,6 +174,7 @@
 > Document important technical decisions here.
 
 - **2026-01-30:** Chose Unreal Engine 5 for large world support and visual quality
+- **2026-01-30:** CI/CD approach - GitHub Actions with self-hosted runner consideration due to UE5 size (~50GB). Static analysis options: SonarCloud (paid for C++), PVS-Studio (free for OSS), or Clang-Tidy (free, built-in)
 
 ### Dependencies
 > External dependencies or prerequisites.
@@ -151,4 +185,4 @@
 ---
 
 ## Task ID Counter
-> Increment this when creating new tasks: **FED-015**
+> Increment this when creating new tasks: **FED-020**
