@@ -1,0 +1,47 @@
+---
+description: Critical agent workflow - Non-negotiable steps before any work
+globs: **/*
+alwaysApply: true
+---
+
+# Agent Workflow - MUST Follow
+
+## BEFORE ANY WORK - Do These Steps IN ORDER
+
+### Step 1: Check TODO.md on MAIN Branch
+```bash
+git fetch origin main
+git show origin/main:TODO.md
+```
+- This is the SINGLE SOURCE OF TRUTH for tasks
+- Pick a task from the `Ready` section
+- Understand acceptance criteria before proceeding
+
+### Step 2: Create a NEW Worktree and Branch
+```bash
+# From the main repo directory, create worktree from main
+git worktree add ../federation-game-FED-XXX -b feature/FED-XXX-description origin/main
+
+# Work in the new worktree
+cd ../federation-game-FED-XXX
+```
+
+### Step 3: Work in the Worktree
+- Make all changes in the worktree, NOT the main repo
+- Commit frequently with format: `[FED-XXX] Description`
+- Update TODO.md to show task "In Progress"
+
+### Step 4: Push and Create PR
+```bash
+git push -u origin HEAD
+gh pr create --title "[FED-XXX] Description" --body "Summary and test plan"
+```
+
+## NEVER Do These Things
+- NEVER commit to an existing branch without explicit instruction
+- NEVER work in the main repo directory - use worktrees
+- NEVER skip creating a branch for a new task
+- NEVER force push to main
+
+## Reference
+See `AGENTS.md` for detailed workflow, best practices, and command reference.

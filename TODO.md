@@ -7,9 +7,9 @@
 ## Instructions for AI Agents
 
 ### Before Starting Work
-1. **Read `AGENTS.md`** for the complete workflow
-2. **Check your current branch/worktree** with `git branch` and `git worktree list`
-3. **Review this TODO list** and pick a task from `Ready` that matches your capabilities
+1. **Check this TODO.md on MAIN branch first** - `git show origin/main:TODO.md`
+2. **Follow `.cursor/rules/agent-workflow.mdc`** - Critical steps are enforced there
+3. **Create a worktree and branch** for your task
 4. **Move the task to `In Progress`** before starting work
 
 ### Task Format
@@ -94,13 +94,14 @@
 ## In Progress
 > Tasks currently being worked on. Include agent/branch info.
 
-<!-- Example:
-- [ ] **[FED-XXX]** Task name `[P1]` `[M]`
-  - **Branch:** feature/FED-XXX-task-name
-  - **Worktree:** ../federation-game-FED-XXX
+- [ ] **[FED-013]** Improve AI agent workflow enforcement `[P0]` `[S]`
+  - Create short Cursor rule with critical non-negotiable steps
+  - Shorten AGENTS.md to reference document
+  - Update TODO.md instructions
+  - **Branch:** feature/FED-013-improve-agent-workflow
+  - **Worktree:** ../federation-game-FED-013
   - **Started:** 2026-01-30
   - **Agent:** Cursor AI
--->
 
 ---
 
@@ -153,4 +154,4 @@
 ---
 
 ## Task ID Counter
-> Increment this when creating new tasks: **FED-013**
+> Increment this when creating new tasks: **FED-014**
