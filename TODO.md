@@ -127,15 +127,6 @@
 ## In Progress
 > Tasks currently being worked on. Include agent/branch info.
 
-- [ ] **[FED-020]** Convert game design docs to markdown `[P1]` `[S]`
-  - Convert design documents from Google Drive to `docs/game-design/`
-  - Extract content from images (BeingMap.png, Inventory images, etc.)
-  - Create placeholder files for Word documents that need manual conversion
-  - **Branch:** feature/FED-020-game-documentation
-  - **Worktree:** ../federation-game-FED-015
-  - **Started:** 2026-01-30
-  - **Agent:** Cursor AI
-
 - [ ] **[FED-014]** Reprioritize tasks - move FED-002/003 to Backlog `[P3]` `[XS]`
   - Move galaxy renderer and camera tasks to Backlog
   - Mark FED-013 as Done
@@ -149,11 +140,9 @@
 ## In Review
 > Tasks with open PRs awaiting review.
 
-<!-- Example:
-- [ ] **[FED-XXX]** Task name `[P1]` `[M]`
-  - **PR:** #123
-  - **Branch:** feature/FED-XXX-task-name
--->
+- [ ] **[FED-020]** Convert game design docs to markdown `[P1]` `[S]`
+  - **PR:** #5
+  - **Branch:** feature/FED-020-game-documentation
 
 ---
 
