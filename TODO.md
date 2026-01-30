@@ -8,7 +8,7 @@
 
 ### Before Starting Work
 1. **Check this TODO.md on MAIN branch first** - `git show origin/main:TODO.md`
-2. **Follow `.cursor/rules/agent-workflow.mdc`** - Critical steps are enforced there
+2. **Follow `.cursor/rules/agent-rules.mdc`** - Critical steps are enforced there
 3. **Create a worktree and branch** for your task
 4. **Move the task to `In Progress`** before starting work
 
@@ -153,7 +153,7 @@
 
 - [x] **[FED-013]** Improve AI agent workflow enforcement `[P0]` `[S]`
   - **PR:** #2 (merged 2026-01-30)
-  - **Notes:** Created `.cursor/rules/agent-workflow.mdc` with critical steps, shortened AGENTS.md
+  - **Notes:** Created `.cursor/rules/agent-rules.mdc` with critical steps, shortened AGENTS.md
 
 ---
 

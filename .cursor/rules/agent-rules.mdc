@@ -38,10 +38,12 @@ gh pr create --title "[FED-XXX] Description" --body "Summary and test plan"
 ```
 
 ## NEVER Do These Things
+- NEVER push directly to main - branch protection requires PRs
 - NEVER commit to an existing branch without explicit instruction
 - NEVER work in the main repo directory - use worktrees
 - NEVER skip creating a branch for a new task
-- NEVER force push to main
+- NEVER force push to any protected branch
+- NEVER merge your own PR without approval (when CI is set up)
 
 ## Reference
 See `AGENTS.md` for detailed workflow, best practices, and command reference.
