@@ -2,35 +2,78 @@
 
 This folder contains all game design documentation for the Federation game project.
 
-## Contents
+---
 
-### Core Systems
+## Core Systems
 
-- [Beings & Races](beings.md) - Playable and NPC races, their attributes and abilities
-- [Races](races.md) - Detailed race descriptions and lore
-- [Inventory System](inventory.md) - Inventory UI, equipment, and item management
-- [Items](items.md) - Item types, properties, and crafting
-- [Vessels & Systems](vessels-and-systems.md) - Ships, vehicles, and their components
+| Document | Description |
+|----------|-------------|
+| [Beings & Races](beings.md) | Being class hierarchy, equipment slots, item relationships |
+| [Races](races.md) | Detailed race descriptions, skills, and lore |
+| [Inventory System](inventory.md) | Inventory UI, equipment, weapons, and weight system |
+| [Items](items.md) | Weapons, armor, consumables, software, and all item types |
+| [Vessels & Systems](vessels-and-systems.md) | Ships, vehicles, hangars, and ship systems |
+| [Controls](controls.md) | Input controls, keybindings, and interaction modes |
 
-### World & Lore
+---
 
-- [Galaxy Map](galaxy-map.md) - The Federation galaxy and star systems
-- [Planets & Lore](planets-and-lore.md) - Planet descriptions and world lore
-- [Timeline](timeline.md) - Historical events and story timeline
-- [Federation Internal Workings](federation-internal.md) - How the Federation government operates
+## World & Lore
 
-### Gameplay
+| Document | Description |
+|----------|-------------|
+| [Planets & Lore](planets-and-lore.md) | All 34 planets, star systems, locations, and world lore |
+| [Galaxy Map](galaxy-map.md) | Visual overview of the Federation galaxy |
+| [Timeline](timeline.md) | Complete historical timeline from 3400 BC to 2300 AD |
+| [Federation Internal Workings](federation-internal.md) | Game mechanics, saving, civilians, and immortality system |
 
-- [Controls](controls.md) - Input controls and keybindings
-- [Quests & Events](quests-and-events.md) - Quest system and world events
-- [Buildings](buildings.md) - Constructible structures and their functions
-- [Object Hierarchy](object-hierarchy.md) - Technical object class structure
+---
+
+## Gameplay
+
+| Document | Description |
+|----------|-------------|
+| [Quests & Events](quests-and-events.md) | Main storylines, side quests, and world events |
+| [Buildings](buildings.md) | All building types, shops, and special locations |
+| [Object Hierarchy](object-hierarchy.md) | Technical object class structure and interfaces |
+
+---
+
+## Quick Reference
+
+### The Five Races
+
+| Race | Population | Homeworld | Special |
+|------|------------|-----------|---------|
+| Chiascura | 1st (Largest) | Gorgon | Federation founders, technology leaders |
+| Humans | 2nd | Earth | Cultural influence, language |
+| Zaggnor | 3rd | Callarando | Speed, industrial power |
+| RH-Union | 4th | N/A | Robot AI, technical/weapons experts |
+| Hellir | 5th (Smallest) | New Hellir | Natural immortality, morph flesh, mysterious origin |
+
+### Major Factions
+
+| Faction | Description |
+|---------|-------------|
+| **The Federation** | United government of the five races |
+| **Imperial Navy** | Military arm of the Federation |
+| **Phase 2** | Secret illuminati seeking to control the Federation |
+| **DarkTech** | Underground criminal organization run by ZX Industries |
+| **The Jaded Suns** | Criminal militia controlling Korg |
+| **The Pryzct** | Hostile alien species threatening the Federation |
+
+### Galaxy Class Cruisers
+
+| Ship | Location | Commander |
+|------|----------|-----------|
+| Forsaken | Marrakech | - |
+| Vigilant | Marraxis | Jallamar Reich |
+| Poseidon | Magnus | - |
 
 ---
 
 ## Original Source Files
 
-These documents were converted from the original design files located at:
+These documents were converted from design files located at:
 `C:\Users\TomHo\My Drive\Tom's Stuff\Personal\Federation\`
 
 ### Converted from Images
@@ -39,13 +82,12 @@ These documents were converted from the original design files located at:
 - `ObjectHeirarchy.png` → [object-hierarchy.md](object-hierarchy.md)
 - `The Federation.jpg` → [galaxy-map.md](galaxy-map.md)
 
-### Needs Manual Conversion (Word Documents)
-The following Word documents need to be manually copied into their respective markdown files:
+### Converted from Word Documents
 - `Buildings.docx` → [buildings.md](buildings.md)
 - `Controls.docx` → [controls.md](controls.md)
 - `Federation Internal Workings.docx` → [federation-internal.md](federation-internal.md)
 - `Federation Timeline.docx` → [timeline.md](timeline.md)
-- `Game Doc.docx` → Consider adding as main overview
+- `Game Doc.docx` → Content merged into [items.md](items.md)
 - `Items.docx` → [items.md](items.md)
 - `Planets and Lore.docx` → [planets-and-lore.md](planets-and-lore.md)
 - `Quests and Events.docx` → [quests-and-events.md](quests-and-events.md)
