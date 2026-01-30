@@ -12,19 +12,16 @@ Explore a living galaxy, build your fleet, and engage in epic battles across the
 
 ## Getting Started
 
-### Prerequisites
-- Unreal Engine 5.4+
-- Visual Studio 2022 (Windows) or Xcode (Mac)
-- Git with Git LFS
+**New to this project?** See the full **[Installation Guide](INSTALLATION.md)** for step-by-step setup instructions.
 
-### Setup
+### Quick Start (if you have everything installed)
+
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/federation-game.git
+git clone https://github.com/TomHolownia/federation-game.git
 cd federation-game
 
-# Initialize Git LFS
-git lfs install
+# Ensure Git LFS files are downloaded
 git lfs pull
 
 # Generate project files (Windows)
@@ -33,6 +30,16 @@ git lfs pull
 # Open in Unreal Editor
 # Double-click FederationGame.uproject
 ```
+
+### Prerequisites
+
+| Requirement | Version |
+|-------------|---------|
+| Unreal Engine | 5.4+ |
+| Visual Studio | 2022 (with C++ workload) |
+| Git LFS | Latest |
+
+See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
 
 ### Running Tests
 ```bash
@@ -76,9 +83,10 @@ If you're an AI agent working on this project:
 
 ## Documentation
 
+- [INSTALLATION.md](INSTALLATION.md) - Complete setup guide
 - [AGENTS.md](AGENTS.md) - AI agent workflow
 - [TODO.md](TODO.md) - Task board
-- `docs/technical/` - Technical documentation (coming soon)
+- `docs/technical/` - Technical documentation
 
 ## License
 
