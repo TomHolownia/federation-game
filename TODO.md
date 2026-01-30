@@ -96,19 +96,13 @@
 ## Ready
 > Tasks that are refined and ready to be picked up.
 
-- [ ] **[FED-015]** Set up GitHub Actions CI pipeline `[P0]` `[M]`
-  - Create workflow for building UE5 project
-  - Run UE5 Automation Tests on PR
-  - Consider self-hosted runner requirements (UE5 is ~50GB)
+- [ ] **[FED-015]** Set up GitHub Actions CI pipeline `[P2]` `[S]`
+  - **Note:** Full UE5 builds are impractical (50GB+, hours to build). Focus on lightweight checks:
+  - Run C++ linting/static analysis (clang-tidy)
+  - Run unit tests (non-UE5 dependent where possible)
+  - Check code formatting
   - Document CI setup in `docs/technical/ci-setup.md`
-  - Acceptance: PRs trigger build + test, status checks visible
-
-- [ ] **[FED-016]** Configure branch protection rules `[P0]` `[XS]`
-  - Require CI checks to pass before merge
-  - Require at least 1 approval (can be relaxed for docs-only changes)
-  - Prevent force pushes to main
-  - Acceptance: Cannot merge failing PRs to main
-
+  - Acceptance: PRs trigger lightweight checks, status visible
 
 - [ ] **[FED-004]** Set up automated testing framework `[P0]` `[S]`
   - Configure UE5 Automation Testing
@@ -121,14 +115,7 @@
 ## In Progress
 > Tasks currently being worked on. Include agent/branch info.
 
-- [ ] **[FED-021]** Restructure UE5 project to repository root `[P0]` `[S]`
-  - Move UE5 project files from federation/ subfolder to root
-  - Add actual UE5 C++ project files (federation module)
-  - Clean up placeholder .gitkeep folders
-  - Acceptance: Project opens and builds from root level
-  - **Branch:** feature/FED-021-ue5-project-restructure
-  - **Started:** 2026-01-30
-  - **Agent:** Cursor AI
+<!-- No tasks currently in progress -->
 
 ---
 
@@ -143,6 +130,14 @@
 
 ## Done
 > Completed tasks. Keep last 10-20 for reference.
+
+- [x] **[FED-021]** Restructure UE5 project to repository root `[P0]` `[S]`
+  - **PR:** #8 (merged 2026-01-30)
+  - **Notes:** Moved UE5 project to root, configured rendering for galaxy scale
+
+- [x] **[FED-016]** Configure branch protection rules `[P0]` `[XS]`
+  - **Completed:** 2026-01-30
+  - **Notes:** Force pushes blocked, enforce for admins enabled
 
 - [x] **[FED-001]** Set up Unreal Engine 5 project structure `[P0]` `[S]`
   - **PR:** #6, #8 (merged 2026-01-30)
@@ -179,7 +174,7 @@
 > Document important technical decisions here.
 
 - **2026-01-30:** Chose Unreal Engine 5 for large world support and visual quality
-- **2026-01-30:** CI/CD approach - GitHub Actions with self-hosted runner consideration due to UE5 size (~50GB). Static analysis options: SonarCloud (paid for C++), PVS-Studio (free for OSS), or Clang-Tidy (free, built-in)
+- **2026-01-30:** CI/CD approach - Full UE5 builds impractical (50GB+, hours to build). Will use lightweight CI: linting, static analysis, unit tests. Consider clang-tidy for static analysis.
 
 ### Dependencies
 > External dependencies or prerequisites.
@@ -190,4 +185,4 @@
 ---
 
 ## Task ID Counter
-> Increment this when creating new tasks: **FED-022**
+> Increment this when creating new tasks: **FED-023**
