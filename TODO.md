@@ -79,11 +79,6 @@
   - Add to AGENTS.md or create separate CI docs
   - Acceptance: Clear policy for automated merging
 
-- [ ] **[FED-002]** Create basic galaxy star field renderer `[P1]` `[M]`
-  - Implement instanced static mesh for stars
-  - Support 10,000+ stars with good performance
-  - Basic star color variation
-  - Acceptance: Galaxy view with visible stars, 60fps
 
 - [ ] **[FED-003]** Implement galaxy camera controller `[P1]` `[M]`
   - Pan, zoom, rotate controls
@@ -121,15 +116,6 @@
 ## In Progress
 > Tasks currently being worked on. Include agent/branch info.
 
-- [ ] **[FED-021]** Restructure UE5 project to repository root `[P0]` `[S]`
-  - Move UE5 project files from federation/ subfolder to root
-  - Add actual UE5 C++ project files (federation module)
-  - Clean up placeholder .gitkeep folders
-  - Acceptance: Project opens and builds from root level
-  - **Branch:** feature/FED-021-ue5-project-restructure
-  - **Started:** 2026-01-30
-  - **Agent:** Cursor AI
-
 ---
 
 ## In Review
@@ -143,6 +129,14 @@
 
 ## Done
 > Completed tasks. Keep last 10-20 for reference.
+
+- [x] **[FED-002]** Create basic galaxy star field renderer `[P1]` `[M]`
+  - **PR:** #10 (ready for merge)
+  - **Notes:** AGalaxyStarField with instanced mesh, spiral galaxy, color variation; smaller defaults, placeable in editor
+
+- [x] **[FED-021]** Restructure UE5 project to repository root `[P0]` `[S]`
+  - **PR:** #8 (merged 2026-01-30)
+  - **Notes:** Moved UE5 project to root, added C++ module
 
 - [x] **[FED-001]** Set up Unreal Engine 5 project structure `[P0]` `[S]`
   - **PR:** #6, #8 (merged 2026-01-30)
