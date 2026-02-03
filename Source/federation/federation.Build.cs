@@ -7,6 +7,9 @@ public class federation : ModuleRules
 	public federation(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+		
+		// Add module source directory to include paths so "Galaxy/GalaxyStarField.h" resolves
+		PublicIncludePaths.AddRange(new string[] { ModuleDirectory });
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
 

@@ -18,7 +18,7 @@
  * - Per-instance color variation via custom data
  * - Configurable galaxy parameters
  */
-UCLASS()
+UCLASS(Blueprintable, Placeable, Category = "Galaxy")
 class FEDERATION_API AGalaxyStarField : public AActor
 {
 	GENERATED_BODY()
@@ -53,15 +53,15 @@ public:
 	
 	/** Total number of stars to generate */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Galaxy|Shape", meta = (ClampMin = "100", ClampMax = "100000"))
-	int32 StarCount = 10000;
+	int32 StarCount = 2000;
 	
 	/** Radius of the galaxy in world units */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Galaxy|Shape", meta = (ClampMin = "1000.0"))
-	float GalaxyRadius = 50000.0f;
+	float GalaxyRadius = 5000.0f;
 	
 	/** Thickness of the galaxy disk */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Galaxy|Shape", meta = (ClampMin = "100.0"))
-	float GalaxyThickness = 2000.0f;
+	float GalaxyThickness = 500.0f;
 	
 	/** Number of spiral arms */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Galaxy|Shape", meta = (ClampMin = "1", ClampMax = "8"))
@@ -87,15 +87,15 @@ public:
 	
 	/** Scale of individual star meshes */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Galaxy|Visual", meta = (ClampMin = "0.1"))
-	float StarScale = 50.0f;
+	float StarScale = 1.0f;
 	
 	/** Minimum star scale multiplier for variation */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Galaxy|Visual", meta = (ClampMin = "0.1", ClampMax = "1.0"))
-	float MinStarScaleMultiplier = 0.5f;
+	float MinStarScaleMultiplier = 0.3f;
 	
 	/** Maximum star scale multiplier for variation */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Galaxy|Visual", meta = (ClampMin = "1.0", ClampMax = "5.0"))
-	float MaxStarScaleMultiplier = 2.0f;
+	float MaxStarScaleMultiplier = 1.0f;
 
 	// --- Components ---
 	
@@ -103,8 +103,8 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UInstancedStaticMeshComponent> StarMeshComponent;
 	
-	/** Static mesh to use for stars (should be a simple sphere or billboard) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Galaxy|Visual")
+	/** Static mesh to use for stars (required - use a simple sphere, e.g. Engine content /Engine/BasicShapes/Shape_Sphere) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Galaxy|Visual", meta = (DisplayName = "Star Mesh"))
 	TObjectPtr<UStaticMesh> StarMesh;
 	
 	/** Material to use for stars (should read custom data for color) */

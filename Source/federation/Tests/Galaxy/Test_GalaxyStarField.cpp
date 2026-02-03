@@ -4,6 +4,7 @@
 #include "Galaxy/GalaxyStarField.h"
 #include "Engine/World.h"
 #include "Tests/AutomationCommon.h"
+#include "Components/InstancedStaticMeshComponent.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -13,7 +14,7 @@
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGalaxyStarFieldGeneratesCorrectStarCount,
 	"FederationGame.Galaxy.StarField.GeneratesCorrectStarCount",
-	EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FGalaxyStarFieldGeneratesCorrectStarCount::RunTest(const FString& Parameters)
@@ -53,7 +54,7 @@ bool FGalaxyStarFieldGeneratesCorrectStarCount::RunTest(const FString& Parameter
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGalaxyStarFieldMinimumStarCount,
 	"FederationGame.Galaxy.StarField.HandlesMinimumStarCount",
-	EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FGalaxyStarFieldMinimumStarCount::RunTest(const FString& Parameters)
@@ -93,7 +94,7 @@ bool FGalaxyStarFieldMinimumStarCount::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGalaxyStarFieldZeroStars,
 	"FederationGame.Galaxy.StarField.HandlesZeroStars",
-	EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FGalaxyStarFieldZeroStars::RunTest(const FString& Parameters)
@@ -132,7 +133,7 @@ bool FGalaxyStarFieldZeroStars::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGalaxyStarFieldReproducibleGeneration,
 	"FederationGame.Galaxy.StarField.ProducesReproducibleResults",
-	EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FGalaxyStarFieldReproducibleGeneration::RunTest(const FString& Parameters)
@@ -182,7 +183,7 @@ bool FGalaxyStarFieldReproducibleGeneration::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGalaxyStarFieldHasInstancedMeshComponent,
 	"FederationGame.Galaxy.StarField.HasInstancedMeshComponent",
-	EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FGalaxyStarFieldHasInstancedMeshComponent::RunTest(const FString& Parameters)
@@ -204,9 +205,9 @@ bool FGalaxyStarFieldHasInstancedMeshComponent::RunTest(const FString& Parameter
 	}
 	
 	// Assert
-	TestNotNull(TEXT("StarMeshComponent should exist"), StarField->StarMeshComponent);
+	TestNotNull(TEXT("StarMeshComponent should exist"), StarField->StarMeshComponent.Get());
 	TestTrue(TEXT("StarMeshComponent should be root component"), 
-		StarField->GetRootComponent() == StarField->StarMeshComponent);
+		StarField->GetRootComponent() == Cast<USceneComponent>(StarField->StarMeshComponent.Get()));
 	
 	// Cleanup
 	StarField->Destroy();
@@ -220,7 +221,7 @@ bool FGalaxyStarFieldHasInstancedMeshComponent::RunTest(const FString& Parameter
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGalaxyStarFieldSpiralArmConfiguration,
 	"FederationGame.Galaxy.StarField.RespectsArmConfiguration",
-	EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FGalaxyStarFieldSpiralArmConfiguration::RunTest(const FString& Parameters)
@@ -262,7 +263,7 @@ bool FGalaxyStarFieldSpiralArmConfiguration::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGalaxyStarFieldClearsOnRegenerate,
 	"FederationGame.Galaxy.StarField.ClearsInstancesOnRegenerate",
-	EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FGalaxyStarFieldClearsOnRegenerate::RunTest(const FString& Parameters)
@@ -307,7 +308,7 @@ bool FGalaxyStarFieldClearsOnRegenerate::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGalaxyStarFieldPerformance10K,
 	"FederationGame.Galaxy.StarField.Performance.Generates10KStars",
-	EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FGalaxyStarFieldPerformance10K::RunTest(const FString& Parameters)

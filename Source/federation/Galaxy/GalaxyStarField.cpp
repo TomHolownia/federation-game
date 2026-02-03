@@ -41,21 +41,21 @@ void AGalaxyStarField::RegenerateStars()
 		return;
 	}
 	
-	// Apply mesh and material if set
-	if (StarMesh)
+	// Nothing to draw without a mesh - clear and bail so we don't have invisible instances
+	if (!StarMesh)
 	{
-		StarMeshComponent->SetStaticMesh(StarMesh);
+		StarMeshComponent->ClearInstances();
+		return;
 	}
+	
+	StarMeshComponent->SetStaticMesh(StarMesh);
 	
 	if (StarMaterial)
 	{
 		StarMeshComponent->SetMaterial(0, StarMaterial);
 	}
 	
-	// Clear existing instances
 	StarMeshComponent->ClearInstances();
-	
-	// Generate the galaxy
 	GenerateSpiralGalaxy();
 }
 
