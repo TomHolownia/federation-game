@@ -37,6 +37,9 @@ git push -u origin HEAD
 gh pr create --title "[FED-XXX] Description" --body "Summary and test plan"
 ```
 
+### When Finishing Work (after creating a PR)
+- **Always give the user the PR as a clickable markdown link**, e.g. `[PR #11](https://github.com/.../pull/11)`, so they can open it directly in Cursor.
+
 ## NEVER Do These Things
 - NEVER push directly to main - branch protection requires PRs
 - NEVER commit to an existing branch without explicit instruction
