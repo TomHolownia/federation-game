@@ -6,11 +6,11 @@
 
 ## Workflow Summary
 
-1. **Check TODO.md on main** → Pick a task from `Ready`
+1. **Check the task board in Notion** → Use the Notion API to fetch the Task Board page; pick a task from **Ready**. See [docs/technical/notion-todo.md](docs/technical/notion-todo.md). Require `NOTION_INTEGRATION_SECRET` (injected, never committed).
 2. **Create worktree & branch** → `git worktree add ../federation-game-FED-XXX -b feature/FED-XXX-desc origin/main`
-3. **Work in worktree** → Make changes, commit frequently
+3. **Work in worktree** → Make changes, commit frequently. Update the task to **In Progress** in Notion.
 4. **Push & create PR** → `git push -u origin HEAD && gh pr create`
-5. **After merge** → Clean up worktree
+5. **After merge** → Update task to **Done** in Notion with PR number; clean up worktree
 
 ---
 
@@ -108,13 +108,13 @@ fd "filename"                    # Find files by name
 2. Search codebase for similar solutions
 3. Check UE5 documentation
 4. Ask the user for clarification
-5. Document blocker in TODO.md
+5. Document blocker in the Notion task board (or ask the user)
 
 ---
 
 ## Safety Rules
 
 - Never force push to main/develop
-- Never commit secrets or passwords
+- Never commit secrets or passwords (including **NOTION_INTEGRATION_SECRET** – use env injection only)
 - Always use feature branches
 - Use Git LFS for binary files (*.uasset, *.umap, *.png, etc.)
