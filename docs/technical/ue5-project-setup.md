@@ -1,10 +1,8 @@
 # Unreal Engine 5 Project Setup Guide
 
-This guide walks you through setting up the Federation Game UE5 project.
+Setup steps for the Federation Game UE5 project.
 
 ## Prerequisites
-
-Before you begin, ensure you have:
 
 1. **Unreal Engine 5.4+** installed via Epic Games Launcher
 2. **Visual Studio 2022** with the following workloads:
@@ -28,9 +26,7 @@ Before you begin, ensure you have:
    - **Starter Content:** No (we'll add our own assets)
    - **Project Name:** `FederationGame`
    - **Project Location:** This repository root (`federation-game/`)
-5. Click **Create**
-
-The engine will generate the project files. This may take a few minutes.
+5. Click **Create** (project generation may take a few minutes).
 
 ## Step 2: Verify Project Files
 
@@ -55,15 +51,14 @@ federation-game/
 
 ## Step 3: Enable Large World Coordinates
 
-Large World Coordinates (LWC) are essential for galaxy-scale positioning.
-
-1. Open the project in Unreal Editor
+Required for galaxy-scale positioning. In Unreal Editor:
+1. Open the project
 2. Go to **Edit > Project Settings**
 3. Navigate to **Engine > General Settings**
 4. Find and enable **Enable Large Worlds**
-5. Restart the editor when prompted
+5. Restart the editor when prompted.
 
-> **Note:** With LWC enabled, `FVector` uses double-precision floats, providing enough precision for galaxy-scale coordinates.
+With LWC, `FVector` is double-precision for galaxy-scale coordinates.
 
 ## Step 4: Configure Recommended Settings
 
@@ -112,9 +107,7 @@ Source/FederationGame/
 
 ## Step 6: Configure Source Control
 
-The repository already has proper `.gitignore` and `.gitattributes` configured for UE5.
-
-Verify Git LFS is tracking binary files:
+`.gitignore` and `.gitattributes` are pre-configured. Verify Git LFS:
 ```bash
 git lfs track
 ```
@@ -125,9 +118,7 @@ You should see entries for `.uasset`, `.umap`, `.png`, `.fbx`, etc.
 
 ### Build from Editor
 
-1. In Unreal Editor, go to **Platforms > Windows > Build**
-2. Wait for compilation (first build takes 5-10 minutes)
-3. Verify no errors in the Output Log
+**Platforms > Windows > Build**. First build ~5–10 min; check Output Log for errors.
 
 ### Build from Command Line
 
@@ -144,8 +135,7 @@ You should see entries for `.uasset`, `.umap`, `.png`, `.fbx`, etc.
 
 ### Run the Project
 
-1. Press **Play** in the editor to verify the empty scene runs
-2. Check for any console errors
+Press **Play**; confirm no console errors.
 
 ## Step 8: Create Initial Commit
 
@@ -164,11 +154,9 @@ git commit -m "[FED-001] Add UE5 project structure
 
 ## Troubleshooting
 
-### "Failed to compile" errors
+### "Failed to compile"
 
-1. Ensure Visual Studio 2022 is installed with C++ workloads
-2. Right-click the `.uproject` file and select "Generate Visual Studio project files"
-3. Open the `.sln` file and build from Visual Studio for better error messages
+Visual Studio 2022 with C++ workloads. Right-click `.uproject` → "Generate Visual Studio project files", then build from the `.sln`.
 
 ### Git LFS issues
 
@@ -180,7 +168,7 @@ git lfs pull
 
 ### Missing shaders
 
-First launch may compile many shaders. This is normal and can take 10-30 minutes on first run.
+First launch compiles shaders (10–30 min is normal).
 
 ## Next Steps
 
@@ -192,4 +180,4 @@ After completing setup:
 
 ---
 
-*Last updated: 2026-01-30*
+*Last updated: 2026-02-03*
