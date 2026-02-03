@@ -71,9 +71,9 @@ git worktree remove ../federation-game-FED-XXX
 git worktree prune
 ```
 
-### Update TODO.md
-- Move task to `Done` with PR number
-- Add new tasks discovered to `Backlog`
+### Update Notion Task Board
+- Move task to **Done** in Notion with PR number and completion date
+- Add new tasks discovered to **Backlog** in Notion (see docs/technical/notion-todo.md)
 
 ---
 
