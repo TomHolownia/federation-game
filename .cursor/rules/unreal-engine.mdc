@@ -23,6 +23,10 @@ This project uses Large World Coordinates (LWC) for galaxy-scale positioning.
 - Use Nanite for complex geometry
 - Enable Lumen for dynamic lighting (or baked for performance)
 
+### Galaxy Scale & Placing Actors
+- **Do not hand-place galaxy-scale content.** Use procedural generation (e.g. `AGalaxyStarField`) and data-driven spawning. See `docs/technical/ai-workflow-and-galaxy-scale.md`.
+- **AI cannot click in the editor.** To "place" actors, use Editor Utilities, Python editor scripts, or data-driven spawners; the doc above describes the workflow.
+
 ## C++ Best Practices
 
 ### Headers
