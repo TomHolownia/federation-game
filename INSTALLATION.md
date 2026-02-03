@@ -274,7 +274,7 @@ git lfs pull --all
 After installation:
 
 1. Read [AGENTS.md](AGENTS.md) if you're an AI agent
-2. Check [TODO.md](TODO.md) for available tasks
+2. Check the **Notion task board** for available tasks (see [docs/technical/notion-todo.md](docs/technical/notion-todo.md); requires `NOTION_INTEGRATION_SECRET` in the environment)
 3. Review `.cursor/rules/` for project conventions
 4. Explore `docs/technical/` for technical documentation
 

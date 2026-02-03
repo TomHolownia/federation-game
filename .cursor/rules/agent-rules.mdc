@@ -8,14 +8,11 @@ alwaysApply: true
 
 ## BEFORE ANY WORK - Do These Steps IN ORDER
 
-### Step 1: Check TODO.md on MAIN Branch
-```bash
-git fetch origin main
-git show origin/main:TODO.md
-```
-- This is the SINGLE SOURCE OF TRUTH for tasks
-- Pick a task from the `Ready` section
-- Understand acceptance criteria before proceeding
+### Step 1: Get the Task Board from Notion
+- The task board lives in **Notion** (Federation Homepage wiki), not in a file.
+- Use the **Notion API** to fetch the Task Board page and read tasks. See **docs/technical/notion-todo.md** for endpoints and the Task Board page ID.
+- **Authentication:** Use `NOTION_INTEGRATION_SECRET` from the environment. Never commit this value; it must be injected (e.g. by the user or CI).
+- Pick a task from the **Ready** section. Understand acceptance criteria before proceeding.
 
 ### Step 2: Create a NEW Worktree and Branch
 ```bash
@@ -27,9 +24,9 @@ cd ../federation-game-FED-XXX
 ```
 
 ### Step 3: Work in the Worktree
-- Make all changes in the worktree, NOT the main repo
+- **Operate from the worktree:** Run all terminal commands from the worktree directory (`cd ../federation-game-FED-XXX`). Make all file edits in the worktree (use the worktree path, not the main repo). This keeps changes on the feature branch and avoids editing main.
 - Commit frequently with format: `[FED-XXX] Description`
-- Update TODO.md to show task "In Progress"
+- Update the task to **In Progress** in the Notion task board (via API; see docs/technical/notion-todo.md)
 
 ### Step 4: Push and Create PR
 ```bash
