@@ -16,15 +16,15 @@ alwaysApply: true
 
 ### Step 2: Create a NEW Worktree and Branch
 ```bash
-# From the main repo directory, create worktree from main
-git worktree add ../federation-game-FED-XXX -b feature/FED-XXX-description origin/main
+# From the main repo directory, create worktree in .worktrees/ (gitignored)
+git worktree add .worktrees/federation-game-FED-XXX -b feature/FED-XXX-description origin/main
 
 # Work in the new worktree
-cd ../federation-game-FED-XXX
+cd .worktrees/federation-game-FED-XXX
 ```
 
 ### Step 3: Work in the Worktree
-- **Operate from the worktree:** Run all terminal commands from the worktree directory (`cd ../federation-game-FED-XXX`). Make all file edits in the worktree (use the worktree path, not the main repo). This keeps changes on the feature branch and avoids editing main.
+- **Operate from the worktree:** Run all terminal commands from the worktree directory (`cd .worktrees/federation-game-FED-XXX`). Make all file edits in the worktree (use the worktree path, not the main repo). This keeps changes on the feature branch and avoids editing main.
 - Commit frequently with format: `[FED-XXX] Description`
 - Update the task to **In Progress** in the Notion task board (via API; see docs/technical/notion-todo.md)
 
