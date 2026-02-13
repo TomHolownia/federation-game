@@ -54,6 +54,9 @@ Build/
 /Automation/Reports/
 /Automation/Logs/
 
+# Git worktrees (local working copies)
+.worktrees/
+
 # Local configuration
 *.local
 *.user

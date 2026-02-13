@@ -12,8 +12,13 @@ Federation Game is a 3D galaxy simulator built with Unreal Engine 5, designed to
 ## Before Making Changes
 
 1. **Read AGENTS.md** - Contains the complete workflow for AI agents
-2. **Check the Notion task board** - Tasks are in the Federation wiki; use the Notion API (see docs/technical/notion-todo.md). Require `NOTION_INTEGRATION_SECRET` from environment; never commit it.
-3. **Verify your worktree/branch** - Never work directly on main
+2. **Check the task board** - Tasks are in Atlassian (Jira/Confluence); use the Atlassian MCP server in Cursor (see `.cursor/mcp.json.example`) or Atlassian APIs. Do not commit secrets.
+3. **Verify your worktree/branch** - Never work directly on main. Create and use worktrees in the **`.worktrees/`** directory (see AGENTS.md).
+
+## Documentation and scripts
+
+- **Do not create new .md (or other doc) files** unless a human explicitly asks for them. Prefer updating existing docs (e.g. AGENTS.md, README) or in-code comments.
+- **Do not add Python (or other one-off) scripts** unless there is absolutely no other option (e.g. existing tooling, shell, or editor features can’t do it). Prefer existing project tooling or simple commands.
 
 ## Code Style
 

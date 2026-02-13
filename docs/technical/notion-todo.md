@@ -54,7 +54,7 @@ The Task Board page contains:
 Agents should:
 
 1. Read the page’s block children to get the current task list.
-2. Pick a task from **Ready**, create a worktree/branch, then update Notion to move that task to **In Progress** (or add a note with branch name).
+2. Pick a task from **Ready**, create a worktree in **`.worktrees/`** and a branch (see AGENTS.md), then update Notion to move that task to **In Progress** (or add a note with branch name).
 3. When done, update the task to **Done** and add PR number / completion date in the block content.
 
 ## References

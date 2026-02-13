@@ -7,10 +7,10 @@
 ## Workflow Summary
 
 1. **Check the task board in Notion** → Use the Notion API to fetch the Task Board page; pick a task from **Ready**. See [docs/technical/notion-todo.md](docs/technical/notion-todo.md). Require `NOTION_INTEGRATION_SECRET` (injected, never committed).
-2. **Create worktree & branch** → `git worktree add ../federation-game-FED-XXX -b feature/FED-XXX-desc origin/main`
+2. **Create worktree & branch** → `git worktree add .worktrees/federation-game-FED-XXX -b feature/FED-XXX-desc origin/main`
 3. **Work in worktree** → Make changes, commit frequently. Update the task to **In Progress** in Notion.
 4. **Push & create PR** → `git push -u origin HEAD && gh pr create`
-5. **After merge** → Update task to **Done** in Notion with PR number; clean up worktree
+5. **After merge** → Update task to **Done** in Notion with PR number; clean up worktree (e.g. `git worktree remove .worktrees/federation-game-FED-XXX`)
 
 ---
 
@@ -65,9 +65,9 @@ git log --oneline origin/main..HEAD  # Check commits
 
 ### After PR Merged
 ```bash
-cd ../federation-game            # Return to main repo
+cd ../federation-game            # Return to main repo (if you were in .worktrees/...)
 git pull origin main             # Get latest
-git worktree remove ../federation-game-FED-XXX
+git worktree remove .worktrees/federation-game-FED-XXX
 git worktree prune
 ```
 
@@ -83,9 +83,13 @@ git worktree prune
 ```bash
 git status                       # Current state
 git worktree list                # All worktrees
+git worktree prune               # Remove stale worktree refs
 git log --oneline -10            # Recent commits
 git stash / git stash pop        # Temporarily store changes
 ```
+
+**Worktrees** live under `.worktrees/` (gitignored). Create with  
+`git worktree add .worktrees/federation-game-FED-XXX -b feature/FED-XXX-desc origin/main`
 
 ### GitHub CLI
 ```bash
