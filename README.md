@@ -1,6 +1,10 @@
 # Federation Game
 
+Huge sprawling space opera.
+
 A 3D galaxy simulator built with Unreal Engine 5, designed for large-scale space and ground battles.
+
+Detailed lore in wiki: https://federationgame.atlassian.net/
 
 ## Vision
 
