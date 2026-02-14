@@ -1,16 +1,8 @@
 # AI Agent Workflow Guide
 
-> Reference document for AI agents. **Critical workflow steps are in `.cursor/rules/agent-rules.mdc`** - those are always loaded and must be followed.
+> **Reference only.** The mandatory workflow (task board → worktree → work → PR) is defined in **`.cursor/rules/agent-rules.mdc`** and is always applied by Cursor. This file adds detail and quick reference—do not duplicate or override the rule.
 
----
-
-## Workflow Summary
-
-1. **Check the task board in Notion** → Use the Notion API to fetch the Task Board page; pick a task from **Ready**. See [docs/technical/notion-todo.md](docs/technical/notion-todo.md). Require `NOTION_INTEGRATION_SECRET` (injected, never committed).
-2. **Create worktree & branch** → `git worktree add .worktrees/federation-game-FED-XXX -b feature/FED-XXX-desc origin/main`
-3. **Work in worktree** → Make changes, commit frequently. Update the task to **In Progress** in Notion.
-4. **Push & create PR** → `git push -u origin HEAD && gh pr create`
-5. **After merge** → Update task to **Done** in Notion with PR number; clean up worktree (e.g. `git worktree remove .worktrees/federation-game-FED-XXX`)
+**Workflow order:** Task board (Confluence) → Create worktree & branch → Work in worktree, update task to In Progress → Push & create PR → After merge: Done in Confluence, remove worktree. Full instructions in agent-rules.mdc.
 
 ---
 
@@ -71,9 +63,9 @@ git worktree remove .worktrees/federation-game-FED-XXX
 git worktree prune
 ```
 
-### Update Notion Task Board
-- Move task to **Done** in Notion with PR number and completion date
-- Add new tasks discovered to **Backlog** in Notion (see docs/technical/notion-todo.md)
+### Update Confluence Task Board
+- Move task to **Done** in Confluence with PR number and completion date
+- Add new tasks discovered to **Backlog** in Confluence (via Confluence MCP or API)
 
 ---
 
@@ -112,13 +104,13 @@ fd "filename"                    # Find files by name
 2. Search codebase for similar solutions
 3. Check UE5 documentation
 4. Ask the user for clarification
-5. Document blocker in the Notion task board (or ask the user)
+5. Document blocker in the Confluence task board (or ask the user)
 
 ---
 
 ## Safety Rules
 
 - Never force push to main/develop
-- Never commit secrets or passwords (including **NOTION_INTEGRATION_SECRET** – use env injection only)
+- Never commit secrets or passwords (including **Atlassian API tokens** – use env injection only)
 - Always use feature branches
 - Use Git LFS for binary files (*.uasset, *.umap, *.png, etc.)

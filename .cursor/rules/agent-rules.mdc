@@ -6,12 +6,14 @@ alwaysApply: true
 
 # Agent Workflow - MUST Follow
 
+**Canonical workflow** (this file). AGENTS.md is reference only (commit format, testing, quick ref).
+
 ## BEFORE ANY WORK - Do These Steps IN ORDER
 
-### Step 1: Get the Task Board from Notion
-- The task board lives in **Notion** (Federation Homepage wiki), not in a file.
-- Use the **Notion API** to fetch the Task Board page and read tasks. See **docs/technical/notion-todo.md** for endpoints and the Task Board page ID.
-- **Authentication:** Use `NOTION_INTEGRATION_SECRET` from the environment. Never commit this value; it must be injected (e.g. by the user or CI).
+### Step 1: Get the Task Board from Confluence
+- The task board lives in **Confluence** (federationgame.atlassian.net), not in a local file.
+- Use the **Confluence MCP** in Cursor (see `.cursor/mcp.json.example`) or Confluence APIs to fetch the Task Board page and read tasks.
+- **Authentication:** Set `ATLASSIAN_SITE_NAME=federationgame`, `ATLASSIAN_USER_EMAIL`, and `ATLASSIAN_API_TOKEN` in the environment (or in MCP env). Never commit these values; inject via env only.
 - Pick a task from the **Ready** section. Understand acceptance criteria before proceeding.
 
 ### Step 2: Create a NEW Worktree and Branch
@@ -26,7 +28,7 @@ cd .worktrees/federation-game-FED-XXX
 ### Step 3: Work in the Worktree
 - **Operate from the worktree:** Run all terminal commands from the worktree directory (`cd .worktrees/federation-game-FED-XXX`). Make all file edits in the worktree (use the worktree path, not the main repo). This keeps changes on the feature branch and avoids editing main.
 - Commit frequently with format: `[FED-XXX] Description`
-- Update the task to **In Progress** in the Notion task board (via API; see docs/technical/notion-todo.md)
+- Update the task to **In Progress** in the Confluence task board (via Confluence MCP or API)
 
 ### Step 4: Push and Create PR
 ```bash
@@ -46,4 +48,4 @@ gh pr create --title "[FED-XXX] Description" --body "Summary and test plan"
 - NEVER merge your own PR without approval (when CI is set up)
 
 ## Reference
-See `AGENTS.md` for detailed workflow, best practices, and command reference.
+See `AGENTS.md` for commit format, PR template, testing, quick reference, and safety rules (reference only—this file is the canonical workflow).
