@@ -1,6 +1,6 @@
 # Installation Guide
 
-Complete setup guide for Federation Game development environment.
+Step-by-step **first-time setup** for the Federation Game development environment. If you already have Git, Git LFS, Visual Studio 2022, and Unreal Engine 5 installed, see [README.md — Quick Start](README.md#quick-start-prerequisites-installed) for a short path.
 
 ## Table of Contents
 
@@ -274,7 +274,7 @@ git lfs pull --all
 After installation:
 
 1. Read [AGENTS.md](AGENTS.md) if you're an AI agent
-2. Check the **Notion task board** for available tasks (see [docs/technical/notion-todo.md](docs/technical/notion-todo.md); requires `NOTION_INTEGRATION_SECRET` in the environment)
+2. Check the **Confluence task board** for available tasks (federationgame.atlassian.net; use Confluence MCP in Cursor, see `.cursor/mcp.json.example`; requires Atlassian env vars in the environment)
 3. Review `.cursor/rules/` for project conventions
 4. Explore `docs/technical/` for technical documentation
 

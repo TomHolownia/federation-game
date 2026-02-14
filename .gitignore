@@ -61,8 +61,13 @@ Build/
 *.local
 *.user
 
-# Cursor MCP config (contains Notion token) - use .cursor/mcp.json.example as template
+# Cursor MCP config - use .cursor/mcp.json.example as template
 .cursor/mcp.json
+
+# Local env (Confluence MCP, etc.) - use .env.example as template, never commit
+.env
+.env.local
+.cursor/.env
 
 # Backup files
 *~

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "Atlassian-MCP-Server": {
+      "url": "https://mcp.atlassian.com/v1/mcp"
+    },
+    "confluence": {
+      "command": "npx",
+      "args": ["-y", "@aashari/mcp-server-atlassian-confluence"],
+      "env": {
+        "ATLASSIAN_SITE_NAME": "federationgame",
+        "ATLASSIAN_USER_EMAIL": "your-email@example.com",
+        "ATLASSIAN_API_TOKEN": "paste-token-from-id.atlassian.com"
+      }
+    }
+  }
+}

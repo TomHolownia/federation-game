@@ -12,9 +12,10 @@ Explore a living galaxy, build your fleet, and engage in epic battles across the
 
 ## Getting Started
 
-**New to this project?** See the full **[Installation Guide](INSTALLATION.md)** for step-by-step setup instructions.
+- **First-time setup:** Full step-by-step (Git, Visual Studio, Unreal Engine, clone, open project) is in **[INSTALLATION.md](INSTALLATION.md)**.
+- **Already have UE5, VS, Git LFS:** Use the quick start below.
 
-### Quick Start (if you have everything installed)
+### Quick Start (prerequisites installed)
 
 ```bash
 # Clone the repository
@@ -54,8 +55,7 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
 ```
 federation-game/
 ├── AGENTS.md              # AI agent workflow guide
-├── docs/technical/
-│   └── notion-todo.md     # Notion task board API usage (task board is in Notion wiki)
+├── docs/technical/        # Technical docs (task board is in Confluence only)
 ├── README.md              # This file
 ├── .cursor/               # Cursor IDE configuration
 │   └── rules/             # Project-specific AI rules
@@ -75,18 +75,16 @@ federation-game/
 
 ## For AI Agents
 
-If you're an AI agent working on this project:
-
-1. **Read `AGENTS.md` first** - Complete workflow guide
-2. **Check the Notion task board** - Tasks live in the Federation wiki; use the Notion API (see `docs/technical/notion-todo.md`). Set `NOTION_INTEGRATION_SECRET` in the environment; never commit it.
-3. **Follow `.cursor/rules/`** - Project-specific conventions
-4. **Write tests** - All new code must be tested
+1. **Follow `.cursor/rules/agent-rules.mdc`** — Mandatory workflow (always applied in Cursor).
+2. **Use `AGENTS.md` for reference** — Commit format, testing, PR template, quick reference.
+3. **Check the Confluence task board** — federationgame.atlassian.net; Confluence MCP (`.cursor/mcp.json.example`); never commit Atlassian env vars.
+4. **Follow `.cursor/rules/`** — Project conventions. Write tests for new code.
 
 ## Documentation
 
 - [INSTALLATION.md](INSTALLATION.md) - Complete setup guide
 - [AGENTS.md](AGENTS.md) - AI agent workflow
-- [docs/technical/notion-todo.md](docs/technical/notion-todo.md) - Notion task board API (task board is in Notion wiki)
+- Task board is in **Confluence** only (federationgame.atlassian.net); use Confluence MCP (`.cursor/mcp.json.example`)
 - `docs/technical/` - Technical documentation
 
 ## License
