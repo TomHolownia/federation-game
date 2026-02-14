@@ -42,10 +42,52 @@ The whole galaxy is defined in data. An Editor Utility reads it and spawns actor
 
 **Other options:** Editor Utilities (C++/Blueprint) or Python editor scripts can spawn actors directly; data-driven is preferred so one source of truth drives the level.
 
+### Implemented: Place Actors From Data
+
+The project provides a **Place Actors From Data** command (Level Editor toolbar) that reads `Config/PlacementData.json` and spawns actors in the current level. This is the canonical way for an AI agent to "place" actors: edit the JSON (or generate it), then run the command.
+
+**PlacementData.json format:**
+
+```json
+{
+  "Actors": [
+    {
+      "Class": "/Script/federation.GalaxyStarField",
+      "Location": [0, 0, 0],
+      "Rotation": [0, 0, 0],
+      "Scale": [1, 1, 1]
+    }
+  ]
+}
+```
+
+- **Class** – C++ class path (e.g. `/Script/ModuleName.ClassName`). Blueprint classes can use their asset path.
+- **Location** – [X, Y, Z] in world units.
+- **Rotation** – [Pitch, Yaw, Roll] in degrees (optional; default 0).
+- **Scale** – [X, Y, Z] or [S] for uniform scale (optional; default 1).
+
+**Steps for AI/agents:**
+
+1. Add or edit entries in `Config/PlacementData.json`.
+2. User (or automated run) opens the level in the editor and clicks **Place Actors From Data** on the Level Editor toolbar.
+3. Actors are spawned; level is marked dirty. Save the level to persist.
+
+To support more actor types or properties, extend the spawner in `Source/federationEditor/PlaceActorsFromDataCommand.cpp` (e.g. read optional keys and set UPROPERTYs after spawn).
+
+### Scalable universe placement strategy
+
+| Source of content | How to manage |
+|-------------------|----------------|
+| **Handcrafted** | Few key locations: place via PlacementData.json or one-off sublevels; stream in with World Partition. |
+| **Random** | Use a seed in data or generator params; same data = same layout. Store seeds in JSON or DataTable. |
+| **Procedural** | Generator actors (e.g. `AGalaxyStarField`) read parameters from data; PlacementData.json defines which generators exist and where, plus params (StarCount, GalaxyRadius, etc.). Extend the JSON schema and spawner to set these when spawning. |
+
+One scalable approach: keep a single **placement data** source (e.g. PlacementData.json or a DataTable) that lists all "root" actors (galaxy generators, system markers, hand-placed heroes). Each entry can include type-specific JSON (e.g. `StarCount`, `GalaxyRadius` for a star field). The same editor command (or a variant) reads this and spawns/updates actors so the level always matches the data.
+
 ---
 
 ## Summary for AI
 
 - **Galaxy scale:** Procedural generation + World Partition + LWC. Don't hand-place.
-- **Placing actors:** Use data + "Setup Galaxy Level" (or Editor Utility / Python). AI edits data and spawner code; you run the utility.
-- **Your role:** Run the editor utility; placement is repeatable and AI-friendly.
+- **Placing actors:** Edit `Config/PlacementData.json`, then run **Place Actors From Data** (Level Editor toolbar). AI edits the JSON and spawner code; a human (or automation) runs the command. See format above.
+- **Your role:** Run the editor command after data changes; placement is repeatable and AI-friendly.
