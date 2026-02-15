@@ -80,6 +80,8 @@ The project provides a **Place Actors From Data** command (Level Editor toolbar)
 
 The **Properties** block works generically for any actor: set any UPROPERTY(EditAnywhere) by name (numbers, bools, strings, asset paths). To support new property types (e.g. FVector from arrays), extend `ApplyPropertiesFromJson` in `Source/federationEditor/PlaceActorsFromDataCommand.cpp`.
 
+**Skybox (Milky Way):** `ASkySphere` is a large sphere actor used as a skybox so the level looks like space. It is already in `PlacementData.json` (scale 5000 at origin). Run **Place Actors From Data** to add it. By default it uses a fallback material (`M_GalaxyStar` or engine default). For a Milky Way look: (1) Download a free equirectangular panorama (e.g. **NASA SVS GLIMPSE 360** – spitzer.caltech.edu/explore/glimpse360 – or **NOIRLab Milky Way Over Maunakea** – noirlab.edu, CC0); (2) Import the image as a texture in Content; (3) Create a material (Unlit, **Two Sided**), sample the texture and connect to Emissive Color; (4) In `PlacementData.json` add `"Properties": { "SkyMaterial": "/Game/Federation/Materials/M_YourSkybox.M_YourSkybox" }` to the SkySphere entry, or set the material on the placed actor in the editor.
+
 ### Scalable universe placement strategy
 
 | Source of content | How to manage |

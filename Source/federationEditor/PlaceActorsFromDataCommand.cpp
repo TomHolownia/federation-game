@@ -3,6 +3,7 @@
 #include "PlaceActorsFromDataCommand.h"
 #include "DefaultGalaxyStarMaterial.h"
 #include "Galaxy/GalaxyStarField.h"
+#include "Skybox/SkySphere.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -286,6 +287,10 @@ void FPlaceActorsFromDataCommand::Execute()
 					}
 				}
 				StarField->RegenerateStars();
+			}
+			if (ASkySphere* SkySphere = Cast<ASkySphere>(Spawned))
+			{
+				SkySphere->UpdateSkyMaterial();
 			}
 			SpawnedCount++;
 		}
