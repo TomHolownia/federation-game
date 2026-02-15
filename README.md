@@ -58,7 +58,6 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
 
 ```
 federation-game/
-├── AGENTS.md              # AI agent workflow guide
 ├── docs/technical/        # Technical docs (task board is in Confluence only)
 ├── README.md              # This file
 ├── .cursor/               # Cursor IDE configuration
@@ -79,15 +78,13 @@ federation-game/
 
 ## For AI Agents
 
-1. **Follow `.cursor/rules/agent-rules.mdc`** — Mandatory workflow (always applied in Cursor).
-2. **Use `AGENTS.md` for reference** — Commit format, testing, PR template, quick reference.
-3. **Check the Confluence task board** — federationgame.atlassian.net; Confluence MCP (`.cursor/mcp.json.example`); never commit Atlassian env vars.
-4. **Follow `.cursor/rules/`** — Project conventions. Write tests for new code.
+1. **Follow `.cursor/rules/agent-rules.mdc`** — Workflow, commit format, quick ref (always applied in Cursor).
+2. **Confluence task board** — federationgame.atlassian.net; Confluence MCP (`.cursor/mcp.json.example`); never commit Atlassian env vars.
+3. **Follow `.cursor/rules/`** — Project conventions. Write tests for new code.
 
 ## Documentation
 
 - [INSTALLATION.md](INSTALLATION.md) - Complete setup guide
-- [AGENTS.md](AGENTS.md) - AI agent workflow
 - Task board is in **Confluence** only (federationgame.atlassian.net); use Confluence MCP (`.cursor/mcp.json.example`)
 - `docs/technical/` - Technical documentation
 

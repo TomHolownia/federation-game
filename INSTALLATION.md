@@ -273,8 +273,8 @@ git lfs pull --all
 
 After installation:
 
-1. Read [AGENTS.md](AGENTS.md) if you're an AI agent
-2. Check the **Confluence task board** for available tasks (federationgame.atlassian.net; use Confluence MCP in Cursor, see `.cursor/mcp.json.example`; requires Atlassian env vars in the environment)
+1. Read `.cursor/rules/agent-rules.mdc` if you're an AI agent
+2. Confluence task board for tasks (federationgame.atlassian.net; Confluence MCP in `.cursor/mcp.json.example`; requires Atlassian env vars)
 3. Review `.cursor/rules/` for project conventions
 4. Explore `docs/technical/` for technical documentation
 
