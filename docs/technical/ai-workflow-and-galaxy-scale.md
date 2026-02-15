@@ -65,6 +65,10 @@ The project provides a **Place Actors From Data** command (Level Editor toolbar)
 - **Location** – [X, Y, Z] in world units.
 - **Rotation** – [Pitch, Yaw, Roll] in degrees (optional; default 0).
 - **Scale** – [X, Y, Z] or [S] for uniform scale (optional; default 1).
+- **Properties** – (optional) Object of property names to values, applied to the spawned actor via reflection. Works for **any** actor type. Supported: numbers, bools, strings, and asset path strings (for UObject* properties). Example: `"Properties": { "StarMesh": "/Engine/BasicShapes/Shape_Sphere.Shape_Sphere", "StarCount": 5000 }`.
+- **StarMesh** – (optional) Shorthand for `AGalaxyStarField`; same as putting in Properties.
+- **StarMaterial** – (optional) Shorthand for `AGalaxyStarField`; same as putting in Properties.
+- **Defaults** – (optional) Root-level object. `Defaults.Properties` is applied to every actor first; each actor's Properties override. If present, `Defaults.StarMesh` and `Defaults.StarMaterial` apply to all `AGalaxyStarField` entries that don’t set their own. Lets one JSON define “all star fields use this mesh/material” without repeating per actor.
 
 **Steps for AI/agents:**
 
@@ -72,7 +76,9 @@ The project provides a **Place Actors From Data** command (Level Editor toolbar)
 2. User (or automated run) opens the level in the editor and clicks **Place Actors From Data** on the Level Editor toolbar.
 3. Actors are spawned; level is marked dirty. Save the level to persist.
 
-To support more actor types or properties, extend the spawner in `Source/federationEditor/PlaceActorsFromDataCommand.cpp` (e.g. read optional keys and set UPROPERTYs after spawn).
+**GalaxyStarField visibility:** Placed `AGalaxyStarField` actors get a default star mesh and material with **zero manual steps**. If `/Game/Federation/Materials/M_GalaxyStar` does not exist, the spawner creates and saves a simple emissive material there on first use, so the mesh always appears. For the **full galaxy look** (star color variation from temperature), use a material that reads **Per Instance Custom Data** (4 floats: R, G, B, Intensity) and save it as `Content/Federation/Materials/M_GalaxyStar`; the spawner will then use that instead. Or set `Defaults.StarMaterial` in JSON to any asset path.
+
+The **Properties** block works generically for any actor: set any UPROPERTY(EditAnywhere) by name (numbers, bools, strings, asset paths). To support new property types (e.g. FVector from arrays), extend `ApplyPropertiesFromJson` in `Source/federationEditor/PlaceActorsFromDataCommand.cpp`.
 
 ### Scalable universe placement strategy
 

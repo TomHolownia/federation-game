@@ -8,18 +8,24 @@ public class federationEditor : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
+		// So Tests/ and other subfolders can include module headers by name
+		PrivateIncludePaths.Add(ModuleDirectory);
+
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "federation" });
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"UnrealEd",
 			"LevelEditor",
+			"ToolMenus",
 			"Slate",
 			"SlateCore",
 			"EditorStyle",
 			"Json",
 			"JsonUtilities",
-			"InputCore"
+			"InputCore",
+			"AssetRegistry",
+			"MaterialEditor"
 		});
 	}
 }

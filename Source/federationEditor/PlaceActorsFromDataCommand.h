@@ -18,4 +18,8 @@ public:
 private:
 	static void Execute();
 	static void RegisterMenus();
+	/** Log selected GalaxyStarField's key properties to Output Log (for comparing working vs spawned). */
+	static void LogSelectedStarFieldProperties();
+	/** Write selected GalaxyStarField's StarMesh/StarMaterial into PlacementData.json Defaults so future Place Actors From Data uses them. */
+	static void UseSelectedStarFieldAsPlacementDefault();
 };
