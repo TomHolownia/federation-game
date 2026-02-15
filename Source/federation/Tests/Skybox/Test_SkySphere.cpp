@@ -33,10 +33,10 @@ bool FSkySphereHasSphereMesh::RunTest(const FString& Parameters)
 		return false;
 	}
 
-	TestNotNull(TEXT("SphereMesh component should exist"), SkySphere->SphereMesh);
+	TestNotNull(TEXT("SphereMesh component should exist"), SkySphere->SphereMesh.Get());
 	if (SkySphere->SphereMesh)
 	{
-		TestNotNull(TEXT("Sphere mesh should have static mesh set"), SkySphere->SphereMesh->GetStaticMesh());
+		TestNotNull(TEXT("Sphere mesh should have static mesh set"), SkySphere->SphereMesh->GetStaticMesh().Get());
 	}
 
 	SkySphere->Destroy();
