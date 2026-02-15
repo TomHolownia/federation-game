@@ -24,7 +24,36 @@ Don't hand-place. Use:
 
 ---
 
-## 2. How AI Can "Place" Actors
+## 2. Level streaming and scale architecture
+
+How we structure levels at galaxy, solar system, and planet scale, and how we transition between them.
+
+### Level structure
+
+| Scale | Approach |
+|-------|----------|
+| **Galaxy** | One level for “space” at galaxy scale. Use **World Partition**: the level is split into cells; only cells near the player load. Author content with the JSON placement tool; World Partition handles chunking and streaming over vast distances. |
+| **Solar system** | **One level per solar system.** When the player enters a system (distance or trigger), **stream in** that system’s level. It contains the star, space around it, and optionally simplified or placeholder planets. Each planet can be its own level. |
+| **Planet** | **One level per planet** (and its content). When the player approaches or enters a planet (e.g. atmosphere boundary), **stream in** that planet’s level. That level holds the surface, cities, towns, etc. Separate level per planet keeps content manageable and lets you set **gravity per level** (e.g. planet level = full gravity, space level = zero). |
+
+### Transitions
+
+- **Space → solar system:** Player gets close to a system → trigger/volume or distance check → **stream in** that solar system level. Can be seamless if you stream early enough.
+- **Space → planet (atmosphere):** Player approaches the planet → start streaming the **planet level**. When they cross the **atmosphere boundary** (volume or altitude), you’re now in the planet level. Add **reentry / dust VFX** at that boundary to sell the transition. Gravity can switch here (e.g. space level = 0, planet level = 980).
+- **Mixed gravity in one level:** e.g. space station hangar (gravity) vs outside (no gravity). Use **gravity volumes**: put a physics/gravity volume only in the hangar; world gravity stays 0. When the player is inside the volume they get gravity; when they leave (e.g. out the airlock) they don’t.
+
+### Cities and detail at distance
+
+Don’t try to render full cities from orbit. Use a **single “distant” representation** until the player is close:
+
+- **Very far:** One cheap representation: **impostor** (billboard), **low-poly silhouette**, or **HLOD** (UE groups many actors into one proxy). Stream in the **real city level/content** only when the player is within range.
+- **Closer:** Stream in the city (or district), then use normal **LOD** and **HLOD** as they get closer so full detail only loads when they’re near.
+
+**In short:** Galaxy = one World Partition level (JSON-authored, streamed by cells). Solar system = one streamed level per system. Planet = one streamed level per planet (gravity, cities, surface). Transitions = stream levels at boundaries (system entry, atmosphere entry) and use VFX (e.g. reentry) and **gravity volumes** where you mix gravity in the same level. Cities = distant proxy (impostor/HLOD) until in range, then stream the real city and use LOD as you get closer.
+
+---
+
+## 3. How AI Can "Place" Actors
 
 AI can't click in the editor. It can write **code and data** that spawn actors. Workflow: **code-first placement**.
 
@@ -95,5 +124,6 @@ One scalable approach: keep a single **placement data** source (e.g. PlacementDa
 ## Summary for AI
 
 - **Galaxy scale:** Procedural generation + World Partition + LWC. Don't hand-place.
+- **Level streaming:** Galaxy = one World Partition level. Solar system = one streamed level per system. Planet = one streamed level per planet. Stream at boundaries (system entry, atmosphere entry); use gravity volumes for mixed gravity (e.g. hangar vs space). Cities = distant proxy (impostor/HLOD) until in range, then stream and LOD. See [Level streaming and scale architecture](#2-level-streaming-and-scale-architecture) above.
 - **Placing actors:** Edit `Config/PlacementData.json`, then run **Place Actors From Data** (Level Editor toolbar). AI edits the JSON and spawner code; a human (or automation) runs the command. See format above.
 - **Your role:** Run the editor command after data changes; placement is repeatable and AI-friendly.
