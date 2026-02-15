@@ -1,51 +1,64 @@
 ---
-description: Critical agent workflow - Non-negotiable steps before any work
+description: Agent workflow - Non-negotiable before any work
 globs: **/*
 alwaysApply: true
 ---
 
-# Agent Workflow - MUST Follow
+# Agent Workflow
 
-**Canonical workflow** (this file). AGENTS.md is reference only (commit format, testing, quick ref).
+## Gate: Before ANY file edits
 
-## BEFORE ANY WORK - Do These Steps IN ORDER
+**Ask:** Am I in a worktree, on a branch, that exists for *this* change?
 
-### Step 1: Get the Task Board from Confluence
-- The task board lives in **Confluence** (federationgame.atlassian.net), not in a local file.
-- Use the **Confluence MCP** in Cursor (see `.cursor/mcp.json.example`) or Confluence APIs to fetch the Task Board page and read tasks.
-- **Authentication:** Set `ATLASSIAN_SITE_NAME=federationgame`, `ATLASSIAN_USER_EMAIL`, and `ATLASSIAN_API_TOKEN` in the environment (or in MCP env). Never commit these values; inject via env only.
-- Pick a task from the **Ready** section. Understand acceptance criteria before proceeding.
+- **No** → Create worktree + branch first. Never edit in the main repo or another task's worktree.
+- **Yes** → Proceed.
 
-### Step 2: Create a NEW Worktree and Branch
+---
+
+## Two paths
+
+**1. Task from Confluence** (task board → worktree → work → PR)
+- Pick a task from Ready. Create worktree: `git worktree add .worktrees/federation-game-FED-XXX -b feature/FED-XXX-desc origin/main`
+- Work in the worktree. Commit: `[FED-XXX] Description`. Push, create PR.
+
+**2. Small change (no Confluence ticket)**
+- No ticket is fine. You still use a worktree + branch.
+- Create worktree: `git worktree add .worktrees/federation-game-<topic> -b feature/<topic> origin/main`
+- Work there. Commit, push, create PR.
+
+---
+
+## Never
+
+- Edit in the main repo directory
+- Edit on a branch that belongs to a different change
+- Push to main (use PRs)
+- Force push to protected branches
+- Commit secrets (use env for Atlassian tokens)
+
+---
+
+## Commit format
+
+- With ticket: `[FED-XXX] Short description (50 chars max)`
+- No ticket: `Short description (50 chars max)`
+
+## While working
+
+- Search before creating (`rg "pattern"`)
+- Match existing style
+- Commit frequently
+- Write tests for new C++ code
+
+## Quick ref
+
 ```bash
-# From the main repo directory, create worktree in .worktrees/ (gitignored)
-git worktree add .worktrees/federation-game-FED-XXX -b feature/FED-XXX-description origin/main
-
-# Work in the new worktree
-cd .worktrees/federation-game-FED-XXX
+git worktree list
+git worktree add .worktrees/federation-game-<name> -b feature/<name> origin/main
+gh pr create
 ```
 
-### Step 3: Work in the Worktree
-- **Operate from the worktree:** Run all terminal commands from the worktree directory (`cd .worktrees/federation-game-FED-XXX`). Make all file edits in the worktree (use the worktree path, not the main repo). This keeps changes on the feature branch and avoids editing main.
-- Commit frequently with format: `[FED-XXX] Description`
-- Update the task to **In Progress** in the Confluence task board (via Confluence MCP or API)
+## Safety
 
-### Step 4: Push and Create PR
-```bash
-git push -u origin HEAD
-gh pr create --title "[FED-XXX] Description" --body "Summary and test plan"
-```
-
-### When Finishing Work (after creating a PR)
-- **Always give the user the PR as a clickable markdown link**, e.g. `[PR #11](https://github.com/.../pull/11)`, so they can open it directly in Cursor.
-
-## NEVER Do These Things
-- NEVER push directly to main - branch protection requires PRs
-- NEVER commit to an existing branch without explicit instruction
-- NEVER work in the main repo directory - use worktrees
-- NEVER skip creating a branch for a new task
-- NEVER force push to any protected branch
-- NEVER merge your own PR without approval (when CI is set up)
-
-## Reference
-See `AGENTS.md` for commit format, PR template, testing, quick reference, and safety rules (reference only—this file is the canonical workflow).
+- Never commit secrets (Atlassian tokens → env only)
+- Use Git LFS for *.uasset, *.umap, *.png
