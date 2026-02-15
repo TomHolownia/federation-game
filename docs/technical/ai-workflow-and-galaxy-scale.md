@@ -42,10 +42,58 @@ The whole galaxy is defined in data. An Editor Utility reads it and spawns actor
 
 **Other options:** Editor Utilities (C++/Blueprint) or Python editor scripts can spawn actors directly; data-driven is preferred so one source of truth drives the level.
 
+### Implemented: Place Actors From Data
+
+The project provides a **Place Actors From Data** command (Level Editor toolbar) that reads `Config/PlacementData.json` and spawns actors in the current level. This is the canonical way for an AI agent to "place" actors: edit the JSON (or generate it), then run the command.
+
+**PlacementData.json format:**
+
+```json
+{
+  "Actors": [
+    {
+      "Class": "/Script/federation.GalaxyStarField",
+      "Location": [0, 0, 0],
+      "Rotation": [0, 0, 0],
+      "Scale": [1, 1, 1]
+    }
+  ]
+}
+```
+
+- **Class** – C++ class path (e.g. `/Script/ModuleName.ClassName`). Blueprint classes can use their asset path.
+- **Location** – [X, Y, Z] in world units.
+- **Rotation** – [Pitch, Yaw, Roll] in degrees (optional; default 0).
+- **Scale** – [X, Y, Z] or [S] for uniform scale (optional; default 1).
+- **Properties** – (optional) Object of property names to values, applied to the spawned actor via reflection. Works for **any** actor type. Supported: numbers, bools, strings, and asset path strings (for UObject* properties). Example: `"Properties": { "StarMesh": "/Engine/BasicShapes/Shape_Sphere.Shape_Sphere", "StarCount": 5000 }`.
+- **StarMesh** – (optional) Shorthand for `AGalaxyStarField`; same as putting in Properties.
+- **StarMaterial** – (optional) Shorthand for `AGalaxyStarField`; same as putting in Properties.
+- **Defaults** – (optional) Root-level object. `Defaults.Properties` is applied to every actor first; each actor's Properties override. If present, `Defaults.StarMesh` and `Defaults.StarMaterial` apply to all `AGalaxyStarField` entries that don’t set their own. Lets one JSON define “all star fields use this mesh/material” without repeating per actor.
+
+**Steps for AI/agents:**
+
+1. Add or edit entries in `Config/PlacementData.json`.
+2. User (or automated run) opens the level in the editor and clicks **Place Actors From Data** on the Level Editor toolbar.
+3. Actors are spawned; level is marked dirty. Save the level to persist.
+
+**GalaxyStarField visibility:** Placed `AGalaxyStarField` actors get a default star mesh and material with **zero manual steps**. If `/Game/Federation/Materials/M_GalaxyStar` does not exist, the spawner creates and saves a simple emissive material there on first use, so the mesh always appears. For the **full galaxy look** (star color variation from temperature), use a material that reads **Per Instance Custom Data** (4 floats: R, G, B, Intensity) and save it as `Content/Federation/Materials/M_GalaxyStar`; the spawner will then use that instead. Or set `Defaults.StarMaterial` in JSON to any asset path.
+
+The **Properties** block works generically for any actor: set any UPROPERTY(EditAnywhere) by name (numbers, bools, strings, asset paths). To support new property types (e.g. FVector from arrays), extend `ApplyPropertiesFromJson` in `Source/federationEditor/PlaceActorsFromDataCommand.cpp`.
+
+### Scalable universe placement strategy
+
+| Source of content | How to manage |
+|-------------------|----------------|
+| **Handcrafted** | Few key locations: place via PlacementData.json or one-off sublevels; stream in with World Partition. |
+| **Random** | Use a seed in data or generator params; same data = same layout. Store seeds in JSON or DataTable. |
+| **Procedural** | Generator actors (e.g. `AGalaxyStarField`) read parameters from data; PlacementData.json defines which generators exist and where, plus params (StarCount, GalaxyRadius, etc.). Extend the JSON schema and spawner to set these when spawning. |
+
+One scalable approach: keep a single **placement data** source (e.g. PlacementData.json or a DataTable) that lists all "root" actors (galaxy generators, system markers, hand-placed heroes). Each entry can include type-specific JSON (e.g. `StarCount`, `GalaxyRadius` for a star field). The same editor command (or a variant) reads this and spawns/updates actors so the level always matches the data.
+
 ---
 
 ## Summary for AI
 
 - **Galaxy scale:** Procedural generation + World Partition + LWC. Don't hand-place.
-- **Placing actors:** Use data + "Setup Galaxy Level" (or Editor Utility / Python). AI edits data and spawner code; you run the utility.
-- **Your role:** Run the editor utility; placement is repeatable and AI-friendly.
+- **Placing actors:** Edit `Config/PlacementData.json`, then run **Place Actors From Data** (Level Editor toolbar). AI edits the JSON and spawner code; a human (or automation) runs the command. See format above.
+- **Your role:** Run the editor command after data changes; placement is repeatable and AI-friendly.
