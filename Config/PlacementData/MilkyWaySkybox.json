@@ -1,0 +1,13 @@
+{
+  "Actors": [
+    {
+      "Class": "/Script/federation.SkySphere",
+      "Location": [0, 0, 0],
+      "Rotation": [0, 0, 0],
+      "Scale": [5000, 5000, 5000],
+      "Properties": {
+        "SkyMaterial": "/Game/Federation/Textures/M_MilkyWaySkybox.M_MilkyWaySkybox"
+      }
+    }
+  ]
+}

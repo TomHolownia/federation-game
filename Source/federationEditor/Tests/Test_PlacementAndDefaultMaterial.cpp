@@ -10,7 +10,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 /**
- * PlacementData.json must exist and be valid JSON with an "Actors" array.
+ * At least one placement JSON in Config/PlacementData/ must exist and be valid (e.g. GalaxyMapTest.json).
  */
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPlacementConfigExistsAndIsValidJson,
@@ -20,12 +20,13 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FPlacementConfigExistsAndIsValidJson::RunTest(const FString& Parameters)
 {
-	const FString ConfigPath = FPaths::ProjectConfigDir() / TEXT("PlacementData.json");
+	const FString PlacementDir = FPaths::ProjectConfigDir() / TEXT("PlacementData");
+	const FString ConfigPath = PlacementDir / TEXT("GalaxyMapTest.json");
 
 	FString JsonText;
 	if (!FFileHelper::LoadFileToString(JsonText, *ConfigPath))
 	{
-		AddError(FString::Printf(TEXT("PlacementData.json not found or unreadable at %s"), *ConfigPath));
+		AddError(FString::Printf(TEXT("GalaxyMapTest.json not found or unreadable at %s"), *ConfigPath));
 		return false;
 	}
 
@@ -33,14 +34,14 @@ bool FPlacementConfigExistsAndIsValidJson::RunTest(const FString& Parameters)
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
 	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
 	{
-		AddError(TEXT("PlacementData.json is not valid JSON"));
+		AddError(TEXT("GalaxyMapTest.json is not valid JSON"));
 		return false;
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* ActorsArray = nullptr;
 	if (!Root->TryGetArrayField(TEXT("Actors"), ActorsArray))
 	{
-		AddError(TEXT("PlacementData.json must contain an \"Actors\" array"));
+		AddError(TEXT("Placement JSON must contain an \"Actors\" array"));
 		return false;
 	}
 

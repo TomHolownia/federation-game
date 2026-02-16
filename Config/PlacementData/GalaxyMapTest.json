@@ -1,0 +1,44 @@
+{
+  "Actors": [
+    {
+      "Class": "/Script/Engine.DirectionalLight",
+      "Location": [0, 0, 500],
+      "Rotation": [-45, 45, 0],
+      "Scale": [1, 1, 1]
+    },
+    {
+      "Class": "/Script/federation.GalaxyStarField",
+      "Location": [0, 0, 0],
+      "Rotation": [0, 0, 0],
+      "Scale": [1, 1, 1]
+    },
+    {
+      "Class": "/Script/federation.GalaxyStarField",
+      "Location": [2500, 0, 800],
+      "Rotation": [0, 45, 0],
+      "Scale": [1, 1, 1]
+    },
+    {
+      "Class": "/Script/federation.GalaxyStarField",
+      "Location": [-2000, 2200, 600],
+      "Rotation": [0, 90, 15],
+      "Scale": [1, 1, 1]
+    },
+    {
+      "Class": "/Script/federation.GalaxyStarField",
+      "Location": [0, -2800, 400],
+      "Rotation": [0, 180, 0],
+      "Scale": [1, 1, 1]
+    },
+    {
+      "Class": "/Script/federation.GalaxyStarField",
+      "Location": [1800, 1800, 1000],
+      "Rotation": [20, 30, 0],
+      "Scale": [1, 1, 1]
+    }
+  ],
+  "Defaults": {
+    "StarMesh": "/Engine/BasicShapes/Sphere.Sphere",
+    "StarMaterial": "/Engine/EngineMaterials/DefaultMaterial.DefaultMaterial"
+  }
+}
