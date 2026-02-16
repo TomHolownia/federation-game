@@ -73,9 +73,11 @@ The whole galaxy is defined in data. An Editor Utility reads it and spawns actor
 
 ### Implemented: Place Actors From Data
 
-The project provides a **Place Actors From Data** command (Level Editor toolbar) that reads `Config/PlacementData.json` and spawns actors in the current level. This is the canonical way for an AI agent to "place" actors: edit the JSON (or generate it), then run the command.
+The project provides a **Place Actors From Data** command (Level Editor toolbar and **Tools → Federation** menu). It lists all `*.json` files in **Config/PlacementData/**; choose a preset (e.g. **GalaxyMapTest**, **MilkyWaySkybox**) to spawn those actors in the current level. This is the canonical way for an AI agent to "place" actors: add or edit a JSON in that directory, then run the matching preset.
 
-**PlacementData.json format:**
+**Presets included:** `GalaxyMapTest.json` (directional light + galaxy star fields), `MilkyWaySkybox.json` (sky sphere for space background). Add more JSON files for custom placement (e.g. specific objects, levels, or procedural setups).
+
+**Placement JSON format** (each file in Config/PlacementData/):
 
 ```json
 {
@@ -101,23 +103,25 @@ The project provides a **Place Actors From Data** command (Level Editor toolbar)
 
 **Steps for AI/agents:**
 
-1. Add or edit entries in `Config/PlacementData.json`.
-2. User (or automated run) opens the level in the editor and clicks **Place Actors From Data** on the Level Editor toolbar.
+1. Add or edit a JSON file in `Config/PlacementData/` (e.g. copy `GalaxyMapTest.json` and modify, or create `MyPreset.json`).
+2. User (or automated run) opens the level in the editor and runs **Place Actors From Data** → choose the preset (e.g. **GalaxyMapTest**, **MilkyWaySkybox**).
 3. Actors are spawned; level is marked dirty. Save the level to persist.
 
 **GalaxyStarField visibility:** Placed `AGalaxyStarField` actors get a default star mesh and material with **zero manual steps**. If `/Game/Federation/Materials/M_GalaxyStar` does not exist, the spawner creates and saves a simple emissive material there on first use, so the mesh always appears. For the **full galaxy look** (star color variation from temperature), use a material that reads **Per Instance Custom Data** (4 floats: R, G, B, Intensity) and save it as `Content/Federation/Materials/M_GalaxyStar`; the spawner will then use that instead. Or set `Defaults.StarMaterial` in JSON to any asset path.
 
 The **Properties** block works generically for any actor: set any UPROPERTY(EditAnywhere) by name (numbers, bools, strings, asset paths). To support new property types (e.g. FVector from arrays), extend `ApplyPropertiesFromJson` in `Source/federationEditor/PlaceActorsFromDataCommand.cpp`.
 
+**Skybox (Milky Way):** `ASkySphere` is a large sphere actor used as a skybox. Use **Place Actors From Data → MilkyWaySkybox** to add it (scale 5000 at origin). By default it uses a fallback material (`M_GalaxyStar` or engine default). For a Milky Way look: (1) Download a free equirectangular panorama (e.g. **NASA SVS GLIMPSE 360** – spitzer.caltech.edu/explore/glimpse360 – or **NOIRLab Milky Way Over Maunakea** – noirlab.edu, CC0); (2) Import the image as a texture in Content; (3) Create a material (Unlit, **Two Sided**), sample the texture and connect to Emissive Color; (4) In `Config/PlacementData/MilkyWaySkybox.json` add `"Properties": { "SkyMaterial": "/Game/Federation/Materials/M_YourSkybox.M_YourSkybox" }` to the SkySphere entry, or set the material on the placed actor in the editor.
+
 ### Scalable universe placement strategy
 
 | Source of content | How to manage |
 |-------------------|----------------|
-| **Handcrafted** | Few key locations: place via PlacementData.json or one-off sublevels; stream in with World Partition. |
+| **Handcrafted** | Few key locations: place via a preset in Config/PlacementData/ or one-off sublevels; stream in with World Partition. |
 | **Random** | Use a seed in data or generator params; same data = same layout. Store seeds in JSON or DataTable. |
-| **Procedural** | Generator actors (e.g. `AGalaxyStarField`) read parameters from data; PlacementData.json defines which generators exist and where, plus params (StarCount, GalaxyRadius, etc.). Extend the JSON schema and spawner to set these when spawning. |
+| **Procedural** | Generator actors (e.g. `AGalaxyStarField`) read parameters from data; each placement JSON defines which generators exist and where, plus params (StarCount, GalaxyRadius, etc.). Extend the JSON schema and spawner to set these when spawning. |
 
-One scalable approach: keep a single **placement data** source (e.g. PlacementData.json or a DataTable) that lists all "root" actors (galaxy generators, system markers, hand-placed heroes). Each entry can include type-specific JSON (e.g. `StarCount`, `GalaxyRadius` for a star field). The same editor command (or a variant) reads this and spawns/updates actors so the level always matches the data.
+One scalable approach: keep **placement presets** in Config/PlacementData/ (e.g. GalaxyMapTest.json, MilkyWaySkybox.json, or custom presets). Each JSON lists "root" actors (galaxy generators, system markers, hand-placed heroes). The editor command lists all presets; choose one to spawn that set of actors so the level matches the data.
 
 ---
 
@@ -125,5 +129,5 @@ One scalable approach: keep a single **placement data** source (e.g. PlacementDa
 
 - **Galaxy scale:** Procedural generation + World Partition + LWC. Don't hand-place.
 - **Level streaming:** Galaxy = one World Partition level. Solar system = one streamed level per system. Planet = one streamed level per planet. Stream at boundaries (system entry, atmosphere entry); use gravity volumes for mixed gravity (e.g. hangar vs space). Cities = distant proxy (impostor/HLOD) until in range, then stream and LOD. See [Level streaming and scale architecture](#2-level-streaming-and-scale-architecture) above.
-- **Placing actors:** Edit `Config/PlacementData.json`, then run **Place Actors From Data** (Level Editor toolbar). AI edits the JSON and spawner code; a human (or automation) runs the command. See format above.
+- **Placing actors:** Add or edit JSON in `Config/PlacementData/`, then run **Place Actors From Data** → choose the preset (Level Editor toolbar or **Tools → Federation**). AI edits the JSON files and spawner code; a human (or automation) runs the chosen preset. See format above.
 - **Your role:** Run the editor command after data changes; placement is repeatable and AI-friendly.

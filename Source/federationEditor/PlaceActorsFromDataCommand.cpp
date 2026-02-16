@@ -3,6 +3,7 @@
 #include "PlaceActorsFromDataCommand.h"
 #include "DefaultGalaxyStarMaterial.h"
 #include "Galaxy/GalaxyStarField.h"
+#include "Skybox/SkySphere.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -16,9 +17,11 @@
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "Misc/MessageDialog.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 #include "UObject/UnrealType.h"
 #include "Engine/Selection.h"
 #include "Logging/LogMacros.h"
+#include "ToolMenu.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPlaceActors, Log, All);
 
@@ -122,6 +125,44 @@ void FPlaceActorsFromDataCommand::Unregister()
 	// Startup callbacks are process-lifecycle; no need to unregister on module shutdown.
 }
 
+FString FPlaceActorsFromDataCommand::GetPlacementDataDir()
+{
+	return FPaths::ProjectConfigDir() / TEXT("PlacementData");
+}
+
+void FPlaceActorsFromDataCommand::FillPlaceActorsSubmenu(UToolMenu* Menu)
+{
+	if (!Menu) return;
+	FToolMenuSection& Section = Menu->AddSection("PlacementPresets", LOCTEXT("PlacementPresetsSection", "Presets"));
+	const FString Dir = GetPlacementDataDir();
+	TArray<FString> JsonFiles;
+	IFileManager::Get().FindFiles(JsonFiles, *Dir, TEXT("*.json"));
+	for (const FString& FileName : JsonFiles)
+	{
+		FString BaseName = FPaths::GetBaseFilename(FileName);
+		Section.AddMenuEntry(
+			FName(*FileName),
+			FText::FromString(BaseName),
+			FText::Format(
+				LOCTEXT("PlacePresetTooltip", "Place actors from {0}"),
+				FText::FromString(FileName)
+			),
+			FSlateIcon(),
+			FUIAction(FExecuteAction::CreateLambda([FileName]() { FPlaceActorsFromDataCommand::Execute(FileName); }))
+		);
+	}
+	if (JsonFiles.Num() == 0)
+	{
+		Section.AddMenuEntry(
+			FName(TEXT("NoPlacementFiles")),
+			LOCTEXT("NoPlacementFiles", "(No .json files in Config/PlacementData/)"),
+			LOCTEXT("NoPlacementFilesTooltip", "Add JSON placement files to Config/PlacementData/ and restart the editor."),
+			FSlateIcon(),
+			FUIAction()
+		);
+	}
+}
+
 void FPlaceActorsFromDataCommand::RegisterMenus()
 {
 	// Toolbar (may be off to the right or in overflow >>)
@@ -129,26 +170,24 @@ void FPlaceActorsFromDataCommand::RegisterMenus()
 	if (ToolbarMenu)
 	{
 		FToolMenuSection& ToolbarSection = ToolbarMenu->FindOrAddSection("Federation");
-		ToolbarSection.AddMenuEntry(
+		ToolbarSection.AddSubMenu(
 			PlaceActorsFromDataCommandName,
 			LOCTEXT("PlaceActorsFromDataLabel", "Place Actors From Data"),
-			LOCTEXT("PlaceActorsFromDataTooltip", "Read Config/PlacementData.json and spawn actors in the current level. Use for AI/agent-driven placement."),
-			FSlateIcon(),
-			FUIAction(FExecuteAction::CreateStatic(&FPlaceActorsFromDataCommand::Execute))
+			LOCTEXT("PlaceActorsFromDataTooltip", "Choose a placement preset (Config/PlacementData/*.json) to spawn actors."),
+			FNewToolMenuDelegate::CreateStatic(&FPlaceActorsFromDataCommand::FillPlaceActorsSubmenu)
 		);
 	}
 
-	// Tools menu (easy to find: Tools -> Place Actors From Data)
+	// Tools menu: Tools -> Federation -> Place Actors From Data (submenu of presets)
 	UToolMenu* ToolsMenu = UToolMenus::Get()->ExtendMenu("LevelEditor.MainMenu.Tools");
 	if (ToolsMenu)
 	{
 		FToolMenuSection& ToolsSection = ToolsMenu->AddSection("Federation", LOCTEXT("FederationSection", "Federation"));
-		ToolsSection.AddMenuEntry(
-			FName(TEXT("PlaceActorsFromDataTools")),
+		ToolsSection.AddSubMenu(
+			FName(TEXT("PlaceActorsFromDataSubmenu")),
 			LOCTEXT("PlaceActorsFromDataLabel", "Place Actors From Data"),
-			LOCTEXT("PlaceActorsFromDataTooltip", "Read Config/PlacementData.json and spawn actors in the current level. Use for AI/agent-driven placement."),
-			FSlateIcon(),
-			FUIAction(FExecuteAction::CreateStatic(&FPlaceActorsFromDataCommand::Execute))
+			LOCTEXT("PlaceActorsFromDataTooltip", "Choose a placement preset. JSON files in Config/PlacementData/."),
+			FNewToolMenuDelegate::CreateStatic(&FPlaceActorsFromDataCommand::FillPlaceActorsSubmenu)
 		);
 		ToolsSection.AddMenuEntry(
 			FName(TEXT("LogSelectedStarFieldProps")),
@@ -160,14 +199,14 @@ void FPlaceActorsFromDataCommand::RegisterMenus()
 		ToolsSection.AddMenuEntry(
 			FName(TEXT("UseSelectedStarFieldAsDefault")),
 			LOCTEXT("UseSelectedAsDefaultLabel", "Use selected GalaxyStarField as placement default"),
-			LOCTEXT("UseSelectedAsDefaultTooltip", "Write the selected GalaxyStarField's StarMesh and StarMaterial into Config/PlacementData.json Defaults. Next Place Actors From Data will use them."),
+			LOCTEXT("UseSelectedAsDefaultTooltip", "Write the selected GalaxyStarField's StarMesh and StarMaterial into GalaxyMapTest.json Defaults. Place Actors From Data -> GalaxyMapTest will use them."),
 			FSlateIcon(),
 			FUIAction(FExecuteAction::CreateStatic(&FPlaceActorsFromDataCommand::UseSelectedStarFieldAsPlacementDefault))
 		);
 	}
 }
 
-void FPlaceActorsFromDataCommand::Execute()
+void FPlaceActorsFromDataCommand::Execute(const FString& RelativeFileName)
 {
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	if (!World)
@@ -176,7 +215,7 @@ void FPlaceActorsFromDataCommand::Execute()
 		return;
 	}
 
-	const FString ConfigPath = FPaths::ProjectConfigDir() / TEXT("PlacementData.json");
+	const FString ConfigPath = GetPlacementDataDir() / RelativeFileName;
 	FString JsonText;
 	if (!FFileHelper::LoadFileToString(JsonText, *ConfigPath))
 	{
@@ -191,14 +230,20 @@ void FPlaceActorsFromDataCommand::Execute()
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
 	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
 	{
-		FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("InvalidJson", "PlacementData.json is not valid JSON."));
+		FMessageDialog::Open(EAppMsgType::Ok, FText::Format(
+			LOCTEXT("InvalidJson", "{0} is not valid JSON."),
+			FText::FromString(RelativeFileName)
+		));
 		return;
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* ActorsArray = nullptr;
 	if (!Root->TryGetArrayField(TEXT("Actors"), ActorsArray) || !ActorsArray || ActorsArray->Num() == 0)
 	{
-		FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("NoActors", "PlacementData.json must contain an \"Actors\" array with at least one entry."));
+		FMessageDialog::Open(EAppMsgType::Ok, FText::Format(
+			LOCTEXT("NoActors", "{0} must contain an \"Actors\" array with at least one entry."),
+			FText::FromString(RelativeFileName)
+		));
 		return;
 	}
 
@@ -287,14 +332,19 @@ void FPlaceActorsFromDataCommand::Execute()
 				}
 				StarField->RegenerateStars();
 			}
+			if (ASkySphere* SkySphere = Cast<ASkySphere>(Spawned))
+			{
+				SkySphere->UpdateSkyMaterial();
+			}
 			SpawnedCount++;
 		}
 	}
 
 	World->MarkPackageDirty();
 	FMessageDialog::Open(EAppMsgType::Ok, FText::Format(
-		LOCTEXT("Done", "Placed {0} actor(s) from PlacementData.json."),
-		FText::AsNumber(SpawnedCount)
+		LOCTEXT("Done", "Placed {0} actor(s) from {1}."),
+		FText::AsNumber(SpawnedCount),
+		FText::FromString(RelativeFileName)
 	));
 }
 
@@ -375,18 +425,19 @@ void FPlaceActorsFromDataCommand::UseSelectedStarFieldAsPlacementDefault()
 		));
 		return;
 	}
-	FString ConfigPath = FPaths::ProjectConfigDir() / TEXT("PlacementData.json");
+	// Write Defaults to GalaxyMapTest.json so star-field presets use them
+	const FString ConfigPath = GetPlacementDataDir() / TEXT("GalaxyMapTest.json");
 	FString JsonText;
 	if (!FFileHelper::LoadFileToString(JsonText, *ConfigPath))
 	{
-		FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("NoPlacementFile", "Could not read PlacementData.json. Create it first with an Actors array."));
+		FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("NoPlacementFile", "Could not read Config/PlacementData/GalaxyMapTest.json. Create it first with an Actors array."));
 		return;
 	}
 	TSharedPtr<FJsonObject> Root;
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
 	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
 	{
-		FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("InvalidPlacementJson", "PlacementData.json is not valid JSON."));
+		FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("InvalidPlacementJson", "GalaxyMapTest.json is not valid JSON."));
 		return;
 	}
 	const TSharedPtr<FJsonObject>* Existing = nullptr;
@@ -407,10 +458,10 @@ void FPlaceActorsFromDataCommand::UseSelectedStarFieldAsPlacementDefault()
 	FJsonSerializer::Serialize(Root.ToSharedRef(), Writer);
 	if (!FFileHelper::SaveStringToFile(OutputString, *ConfigPath))
 	{
-		FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("WriteFailed", "Could not write PlacementData.json."));
+		FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("WriteFailed", "Could not write GalaxyMapTest.json."));
 		return;
 	}
-	FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("DefaultsWritten", "PlacementData.json Defaults updated with this star field's StarMesh and StarMaterial. Run Place Actors From Data to spawn using them."));
+	FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("DefaultsWritten", "GalaxyMapTest.json Defaults updated with this star field's StarMesh and StarMaterial. Run Place Actors From Data -> GalaxyMapTest to spawn using them."));
 }
 
 #undef LOCTEXT_NAMESPACE
