@@ -5,8 +5,28 @@
 #include "Engine/World.h"
 #include "Tests/AutomationCommon.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
+
+/**
+ * Helper function to set up a default mesh for testing.
+ * RegenerateStars() requires a StarMesh to be set, otherwise it returns early.
+ */
+static void SetupTestMesh(AGalaxyStarField* StarField)
+{
+	if (!StarField)
+	{
+		return;
+	}
+	
+	// Load the default engine sphere mesh (same as SkySphere uses)
+	UStaticMesh* DefaultMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	if (DefaultMesh)
+	{
+		StarField->StarMesh = DefaultMesh;
+	}
+}
 
 /**
  * Test that AGalaxyStarField generates the correct number of stars.
@@ -35,6 +55,7 @@ bool FGalaxyStarFieldGeneratesCorrectStarCount::RunTest(const FString& Parameter
 	}
 	
 	// Act
+	SetupTestMesh(StarField);
 	const int32 ExpectedCount = 1000;
 	StarField->StarCount = ExpectedCount;
 	StarField->RegenerateStars();
@@ -75,6 +96,7 @@ bool FGalaxyStarFieldMinimumStarCount::RunTest(const FString& Parameters)
 	}
 	
 	// Act
+	SetupTestMesh(StarField);
 	const int32 MinCount = 100;
 	StarField->StarCount = MinCount;
 	StarField->RegenerateStars();
@@ -115,6 +137,7 @@ bool FGalaxyStarFieldZeroStars::RunTest(const FString& Parameters)
 	}
 	
 	// Act - Set to zero (will be clamped by UPROPERTY meta, but test internal handling)
+	SetupTestMesh(StarField);
 	StarField->StarCount = 0;
 	StarField->RegenerateStars();
 	
@@ -155,6 +178,8 @@ bool FGalaxyStarFieldReproducibleGeneration::RunTest(const FString& Parameters)
 	}
 	
 	// Act - Generate with same seed
+	SetupTestMesh(StarField1);
+	SetupTestMesh(StarField2);
 	const int32 TestSeed = 42;
 	const int32 TestStarCount = 500;
 	
@@ -242,6 +267,7 @@ bool FGalaxyStarFieldSpiralArmConfiguration::RunTest(const FString& Parameters)
 	}
 	
 	// Act - Configure and generate
+	SetupTestMesh(StarField);
 	StarField->StarCount = 1000;
 	StarField->SpiralArmCount = 2;
 	StarField->CoreDensity = 0.5f; // 50% core, 50% arms
@@ -284,6 +310,7 @@ bool FGalaxyStarFieldClearsOnRegenerate::RunTest(const FString& Parameters)
 	}
 	
 	// Act - Generate twice with different counts
+	SetupTestMesh(StarField);
 	StarField->StarCount = 500;
 	StarField->RegenerateStars();
 	const int32 FirstCount = StarField->GetStarCount();
@@ -329,6 +356,7 @@ bool FGalaxyStarFieldPerformance10K::RunTest(const FString& Parameters)
 	}
 	
 	// Act - Generate 10,000 stars and measure time
+	SetupTestMesh(StarField);
 	StarField->StarCount = 10000;
 	
 	const double StartTime = FPlatformTime::Seconds();

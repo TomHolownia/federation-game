@@ -4,6 +4,7 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "Components/SceneComponent.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -29,16 +30,30 @@ bool FLargeWorldCoordinatesPreservePosition::RunTest(const FString& Parameters)
 
 	// 100 million units - with 32-bit float, precision here is ~1 unit; with LWC (double) we get sub-millimetre
 	const FVector LargePosition(1e8, 2e8, -5e7);
+	const FTransform SpawnTransform(LargePosition);
 
-	AActor* Actor = World->SpawnActor<AActor>();
+	// Spawn actor at the large position directly using transform
+	AActor* Actor = World->SpawnActor<AActor>(AActor::StaticClass(), SpawnTransform);
 	if (!Actor)
 	{
 		AddError(TEXT("Failed to spawn actor"));
 		return false;
 	}
 
-	Actor->SetActorLocation(LargePosition);
-	const FVector ReadBack = Actor->GetActorLocation();
+	// AActor needs a root component for GetActorLocation() to work correctly
+	// Create a simple scene component and set it as root BEFORE setting location
+	USceneComponent* RootComp = NewObject<USceneComponent>(Actor, USceneComponent::StaticClass(), TEXT("RootComponent"));
+	Actor->SetRootComponent(RootComp);
+	RootComp->RegisterComponent();
+	
+	// Set the location on the root component directly, then verify via actor
+	RootComp->SetWorldLocation(LargePosition, false, nullptr, ETeleportType::TeleportPhysics);
+	
+	// Also set via actor API to ensure consistency
+	Actor->SetActorLocation(LargePosition, false, nullptr, ETeleportType::TeleportPhysics);
+
+	// Verify the position was set correctly - check root component location directly
+	const FVector ReadBack = RootComp->GetComponentLocation();
 
 	Actor->Destroy();
 
