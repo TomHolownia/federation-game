@@ -165,7 +165,11 @@ We have figured out our method of automating placement of assets by using multip
 
 ## 4. Bulk Importing Assets
 
-### Python Scripting (Recommended)
+**Note:** This should extend the existing **FederationEditor** module rather than being a separate system. FederationEditor already handles actor placement via `PlaceActorsFromDataCommand`; we should add bulk import as a complementary command in the same module.
+
+**Workflow:** Import assets (FBX/OBJ/etc.) → Creates .uasset files → Place actors using those assets (via existing placement system)
+
+### Python Scripting (Alternative - Not Recommended for This Project)
 
 #### Requirements
 - Unreal Engine Python API (`unreal` module)
@@ -234,38 +238,48 @@ def bulk_import_assets(source_dir, destination_path):
 bulk_import_assets("C:/MyAssets", "/Game/ImportedAssets")
 ```
 
-### Editor Utilities (Blueprint/C++)
+### C++ Implementation (Recommended - Extend FederationEditor)
 
-#### Blueprint Editor Utility
-- **Create:** Blueprint → Editor Utility
-- **Functionality:** Can iterate folders, import assets, set properties
-- **Limitation:** Less flexible than Python for complex workflows
+**Approach:** Add bulk import functionality directly to the FederationEditor module, similar to how `PlaceActorsFromDataCommand` works.
 
-#### C++ Editor Utility
-- **Create:** C++ class inheriting from `UEditorUtilityWidget` or `UEditorUtilityBlueprint`
-- **Functionality:** Full access to import APIs
-- **Advantage:** Can be integrated into existing FederationEditor module
+#### Implementation Details
+- **New Class:** `FBulkImportAssetsCommand` in `Source/federationEditor/BulkImportAssetsCommand.h/cpp`
+- **API:** Use `FAssetToolsModule` and `AssetImportTask` (C++ equivalent of Python API)
+- **Integration:** Register in `FfederationEditorModule::StartupModule()` alongside `PlaceActorsFromDataCommand`
+- **Menu:** Add to Tools → Federation menu (same location as "Place Actors From Data")
+- **Advantages:** 
+  - Consistent with existing codebase
+  - No Python dependency
+  - Better integration with UE5 editor systems
+  - Can share code/utilities with placement system
 
 ### Integration with Existing Workflow
 
-#### Extend PlaceActorsFromDataCommand
-- **Current:** Places actors from JSON data
-- **Extension:** Add asset import step before placement
-- **Workflow:** Import assets → Place actors using imported assets
+#### Extend FederationEditor Module
+- **Current:** `PlaceActorsFromDataCommand` places actors from JSON data (assumes assets already exist)
+- **Extension:** Add bulk import functionality to FederationEditor
+- **New Command:** `BulkImportAssetsCommand` - Import external assets (FBX, OBJ, GLTF) into UE5
+- **Workflow:** Import assets → Place actors using imported assets (both via FederationEditor)
 
-#### Batch Import Tool
-- **Create:** New editor command in FederationEditor module
-- **Functionality:** Scan directory, import all assets, organize by folder structure
-- **UI:** Simple dialog to select source directory and destination
+#### Implementation Approach
+- **Add to FederationEditor:** New C++ class `FBulkImportAssetsCommand` in `Source/federationEditor/`
+- **Menu Integration:** Add to same Tools → Federation menu alongside "Place Actors From Data"
+- **Functionality:** 
+  - Scan directory for asset files (FBX, OBJ, GLTF, textures)
+  - Import using UE5's `AssetImportTask` API
+  - Maintain folder structure from source
+  - Generate import manifest/log for reference
+- **UI:** Simple dialog to select source directory and destination path in Content/
 
 ### Recommendations
 
-1. **Use Python scripts for bulk import** - Most flexible, can be run from command line
-2. **Create reusable import script** - Parameterized for different asset types
-3. **Integrate with existing workflow** - Add import step to asset placement pipeline
+1. **Extend FederationEditor** - Use existing module rather than separate system
+2. **C++ Implementation** - More control than Python, integrates with existing codebase
+3. **Two-step workflow** - Import assets first, then place actors (both via FederationEditor)
 4. **Automate organization** - Maintain folder structure from source, auto-organize by type
 5. **Add progress tracking** - Show import progress for large batches
 6. **Handle errors gracefully** - Log failures, continue with remaining assets
+7. **Optional: Combined workflow** - Future enhancement: JSON can reference external files, auto-import then place
 
 ---
 
@@ -290,10 +304,11 @@ bulk_import_assets("C:/MyAssets", "/Game/ImportedAssets")
 4. **Integrate with placement system** - Apply variations during JSON placement
 
 ### Phase 4: Bulk Import Automation
-1. **Create Python import script** - Bulk import from directory
-2. **Add to FederationEditor** - New menu command for bulk import
-3. **Test with sample assets** - Verify import, organization, placement
-4. **Document workflow** - How to use bulk import tool
+1. **Extend FederationEditor** - Add `FBulkImportAssetsCommand` class
+2. **Implement import functionality** - Use UE5 AssetImportTask API in C++
+3. **Add menu command** - Tools → Federation → Bulk Import Assets
+4. **Test with sample assets** - Verify import, organization, placement workflow
+5. **Document workflow** - How to use bulk import tool (import → place actors)
 
 ### Phase 5: Integration
 1. **Combine workflows** - Import → Place → Vary
