@@ -39,6 +39,7 @@ So the **renderer** is configured for LWC. Ensure **Enable Large Worlds** is che
 
 - After enabling and restarting, `FVector` in C++ is double-precision when LWC is on.
 - In Blueprint, position/transform pins use the same underlying precision.
+- **Automation test:** Run `FederationGame.Core.LargeWorldCoordinates.PreservePositionAtLargeScale` (Window → Developer Tools → Session Frontend → Automation, filter “LargeWorldCoordinates”). It spawns an actor at 100M units and asserts the position is preserved; if it fails, LWC may be off or the project may need an editor restart after enabling.
 
 ## 3. How to Use LWC in Code
 
@@ -86,7 +87,13 @@ So:
 
 They address different problems and work together: precise coordinates everywhere, and only load what’s needed.
 
-## 6. Summary
+## 6. How to Test (in this project)
+
+1. **Enable LWC** (if not already): The worktree has `bEnableLargeWorldSupport=True` in `Config/DefaultEngine.ini` and `r.LargeWorldRenderPosition=True` in the same file. Open the project in the editor; if the project was created before LWC was added, use **Edit → Project Settings → Engine → General Settings** and ensure **Enable Large Worlds** is checked, then restart the editor.
+2. **Run the automation test:** In the editor, **Window → Developer Tools → Session Frontend**. Open the **Automation** tab, filter by `LargeWorldCoordinates` or `FederationGame.Core`. Run **PreservePositionAtLargeScale**. It spawns an actor at (100M, 200M, -50M), reads the location back, and passes if the position is preserved within 0.01 units.
+3. **Manual check:** Place or spawn something at a huge location (e.g. via **Place Actors From Data** with a large `Location` in JSON, or drag an actor and type 1e8 in the Details panel). Move the camera slowly; there should be no jitter. Without LWC, you’d see position snapping or wobble at that scale.
+
+## 7. Summary
 
 | Topic | Conclusion |
 |-------|------------|
@@ -95,6 +102,7 @@ They address different problems and work together: precise coordinates everywher
 | **Precision** | Double-precision keeps positions stable at galaxy scale; verify by testing at large coordinates (e.g. 1e7) and checking for jitter. |
 | **Still need LWC?** | Yes, for correct galaxy-scale positions. |
 | **LWC + streaming** | LWC = precision in one big world; World Partition = stream cells in that world; streamed levels = load solar system/planet levels. They complement each other. |
+| **How to test** | Run automation test `FederationGame.Core.LargeWorldCoordinates.PreservePositionAtLargeScale`; or manually place an actor at 1e8 and check for jitter. |
 
 ---
 
