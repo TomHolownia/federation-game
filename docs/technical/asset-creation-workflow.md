@@ -1,453 +1,97 @@
-# Asset Creation Workflow Research
+# Asset Creation Workflow
 
-**Task:** FED-026 - Figure out assets creation workflow
+**Task:** FED-026
 
-## Problem Statement
-
-We have figured out our method of automating placement of assets by using multiple levels with FederationEditor. However, we are going to need a lot of assets to create a galaxy. This document addresses:
-
-1. **Where should we get generic assets from?**
-2. **How do we build the custom assets we need?**
-3. **How do we add variety to assets so that if we place two versions of Asset A, they don't look exactly the same?**
-4. **How do we import thousands of assets into our project without Tom having to manually import them all?**
+We automate placement via FederationEditor and levels, but we need many assets for a galaxy. This doc covers: where to get them, how to keep a unified look, how to credit creators, how to create/vary assets (including with Blender + AI), and how to bulk import. All tooling stays in **C++ and Unreal Editor**—no Python. (Unreal uses C++ for code, not C#.)
 
 ---
 
-## 1. Where to Get Generic Assets
+## 1. Where to Get Assets
 
-### Free Sources
+Using multiple sources is fine. Common options:
 
-#### Epic Games Fab Marketplace
-- **Primary resource:** Epic Games partners with Fab creators to offer free assets that rotate every two weeks
-- **Permanent library:** Fab maintains a permanent library of free resources including high-quality Megascans
-- **Access:** Browse at [fab.com](https://fab.com) or [unrealengine.com/fabfreecontent](https://unrealengine.com/en-US/fabfreecontent)
-- **Quality:** High-quality, production-ready assets
-- **License:** Check individual asset licenses (most are CC0 or similar)
-
-#### Unreal Engine Marketplace (Free Section)
-- **Official source:** UE Marketplace has a dedicated free assets section
-- **Filtering:** Can filter by content type (environments, props, characters, etc.)
-- **Access:** [unrealengine.com/marketplace/free](https://www.unrealengine.com/marketplace/en-US/free)
-- **Update frequency:** New free content added regularly
-
-#### Asset Aggregators
-- **Asset Freaks:** Aggregates free UE5 assets from Fab, including sci-fi specific items
-- **Access:** [assetfreaks.com](https://assetfreaks.com)
-
-### Paid Sources (Consider for Quality/Volume)
-
-#### Unreal Engine Marketplace
-- **POLYGON - Sci-Fi Space Pack:** Low-poly modular space game assets for environments
-- **Space Frontier Stations & Ships:** Environment assets featuring space stations and ships
-- **Quality:** Professional-grade assets, often optimized for UE5
-- **Cost:** Varies ($10-$100+ per pack)
-
-#### Megascans (via Quixel Bridge)
-- **Integration:** Built into UE5 via Quixel Bridge
-- **Content:** Photorealistic scanned assets (rocks, surfaces, vegetation)
-- **Use case:** Planetary surfaces, natural environments
-- **Cost:** Free for Unreal Engine projects
-
-### Recommendations
-
-1. **Start with Fab free content** - High quality, regularly updated, free
-2. **Use Megascans for natural surfaces** - Integrated, free, photorealistic
-3. **Purchase key packs** - For specific needs (ships, stations) where free options are limited
-4. **Build custom assets** - For unique, game-specific content (see section 2)
+- **Fab / Epic free content** – [fab.com](https://fab.com), [unrealengine.com/fabfreecontent](https://unrealengine.com/en-US/fabfreecontent). Rotating and permanent free packs; check per-asset license.
+- **UE Marketplace (free)** – [unrealengine.com/marketplace/free](https://www.unrealengine.com/marketplace/en-US/free).
+- **Megascans (Quixel Bridge)** – Free for UE; good for surfaces, nature. Built into UE.
+- **Paid packs** – e.g. POLYGON Sci-Fi Space, Space Frontier; use when free options don’t cover a need.
 
 ---
 
-## 2. How to Build Custom Assets
+## 2. Unified Look
 
-### External Tools
+Mixing sources can look inconsistent. To unify:
 
-#### Blender (Recommended - Free)
-- **Cost:** Free and open-source
-- **Workflow:** Epic provides "Blender to Unreal Essentials" tutorial
-- **Best for:** General 3D modeling, UV mapping, basic animation
-- **Integration:** Direct export to FBX/GLTF for UE5
-- **Learning curve:** Moderate, extensive community resources
-
-#### Maya (Professional)
-- **Cost:** Paid subscription
-- **Workflow:** Epic provides documentation for Maya users
-- **Best for:** Complex character rigging, advanced animation
-- **Integration:** Direct FBX export, Maya Live Link plugin available
-- **Learning curve:** Steeper, industry standard
-
-#### Other Tools
-- **3ds Max:** Alternative to Maya, similar capabilities
-- **ZBrush:** High-detail sculpting for characters/props
-- **Substance Painter:** Texture painting and material authoring
-- **Houdini:** Procedural asset generation (advanced)
-
-### Import Workflow
-
-#### Standard Import Process
-1. **Create asset** in external tool (Blender/Maya/etc.)
-2. **Export** as FBX or GLTF
-3. **Import into UE5** via:
-   - Drag and drop into Content Browser
-   - Content Browser → Import button
-   - Right-click → Import to Current Folder
-
-#### Import Settings
-- **Static Meshes:** Enable "Import Mesh", set LODs if available
-- **Skeletal Meshes:** Enable "Import Skeleton", "Import Animations"
-- **Textures:** Auto-detects UDIM tiles during import
-- **Materials:** Can auto-create materials or import existing
-
-### Recommendations
-
-1. **Use Blender for most custom assets** - Free, capable, well-documented
-2. **Establish asset standards** - Consistent naming, scale, pivot points
-3. **Create asset templates** - Base meshes for common types (ships, stations, buildings)
-4. **Document workflow** - Keep notes on import settings, naming conventions
+- **Art direction** – Pick a reference (e.g. “dirty industrial sci‑fi”) and a small palette (base colors, metal/plastic feel). Stick to it when choosing and approving assets.
+- **Post-processing** – One color grading / LUT and shared post-process settings in UE so everything is tinted and contrasted the same way.
+- **Shared materials** – Where possible, re-use a small set of master materials (e.g. metals, plastics, emissives) and instance them; swap only parameters. Run new assets through these instead of keeping every asset’s original materials.
+- **Lighting** – Same lighting style and intensity range across levels so assets don’t “pop” differently.
+- **Curate** – Reject or rework assets that clash; don’t use everything you download.
 
 ---
 
-## 3. Adding Variety to Assets
+## 3. Crediting Creators and Legal Safety
 
-### Instanced Static Meshes (ISM)
+To avoid legal issues and respect creators:
 
-**What it is:** Render multiple copies of the same mesh efficiently with a single draw call.
+- **Licenses** – Before use, note each asset’s license (CC0, CC BY, custom, etc.). Only use assets whose license allows game use and redistribution (if you ever ship).
+- **Attribution** – Where required (e.g. CC BY), add an entry to the existing **`CREDITS.md`** at the repo root. It already lists third-party assets with work, author, source, and license (see the Milky Way skybox example). Use the same format for each new asset or pack: name, author/source, URL, license.
+- **Source tracking** – In `CREDITS.md`, you can add a short note of which Content folder or asset name the credit refers to if helpful. Keep one section or table per source (Fab, Marketplace, Megascans, etc.) so it’s easy to maintain.
+- **Marketplace/Fab** – Read the license on the store page; some require “Epic Games” or “Fab” in credits. Add those lines to `CREDITS.md`.
+- **Megascans** – Follow Quixel’s attribution rules and add the required line to `CREDITS.md`.
 
-**Creating ISMs:**
-1. Packed Level Actor
-2. Harvest Instances
-3. Spawn in Blueprints/C++
-
-**Performance benefit:** Significant performance improvement vs individual static meshes.
-
-### Material Variations
-
-#### Per Instance Custom Data
-- **Method:** Use Per Instance Custom Data to vary colors/properties per instance
-- **Implementation:** Set custom data (4 floats: R, G, B, Intensity) per instance
-- **Material:** Material reads custom data to vary appearance
-- **Use case:** Color variations, emissive intensity, material parameters
-
-#### Random Colors Per Instance
-- **Method:** Apply random colors through material parameters
-- **Implementation:** Set random color per instance at spawn time
-- **Use case:** Quick variety without custom materials
-
-#### Smart Material Variations
-- **Method:** Material variations that work across all instances
-- **Implementation:** Material parameters that can be overridden per instance
-- **Use case:** Different material types (metal vs painted, weathered vs new)
-
-### Procedural Variations
-
-#### Scale Variations
-- **Method:** Randomize scale per instance (e.g., 0.8x to 1.2x)
-- **Implementation:** Set scale in transform when adding instance
-- **Use case:** Natural variation in size
-
-#### Rotation Variations
-- **Method:** Randomize rotation per instance
-- **Implementation:** Set random rotation when adding instance
-- **Use case:** Avoid uniform orientation
-
-#### Material Parameter Variations
-- **Method:** Vary material parameters (roughness, metallic, color) per instance
-- **Implementation:** Use Per Instance Custom Data or Material Parameter Collections
-- **Use case:** Different material states (rusty vs clean, damaged vs pristine)
-
-### Recommendations
-
-1. **Use ISM for repeated assets** - Performance-critical for galaxy-scale
-2. **Combine multiple variation techniques** - Scale + rotation + material = significant variety
-3. **Create variation presets** - Define common variation sets (e.g., "weathered", "new", "damaged")
-4. **Use procedural generation** - Generate variations at runtime or during placement
+Using the existing `CREDITS.md` for all third-party assets keeps everything in one place and keeps you legally clear.
 
 ---
 
-## 4. Bulk Importing Assets
+## 4. Custom Assets and Blender (Including AI)
 
-**Note:** This should extend the existing **FederationEditor** module rather than being a separate system. FederationEditor already handles actor placement via `PlaceActorsFromDataCommand`; we should add bulk import as a complementary command in the same module.
+**Blender** is a good choice: free, FBX/GLTF export to UE, and lots of tutorials.
 
-**Workflow:** Import assets (FBX/OBJ/etc.) → Creates .uasset files → Place actors using those assets (via existing placement system)
+**Using AI with Blender (without being an artist):**
 
-**Implementation:** C++ only - no Python scripts. Use UE5's `IAssetTools` and `UAssetImportTask` APIs.
+- **AI-generated concepts** – Use image AI (e.g. DALL·E, Midjourney, Stable Diffusion) for concept art and reference. Model in Blender to match the concept; you don’t need to draw by hand.
+- **AI-assisted modeling** – Tools and add-ons are emerging (e.g. mesh from image, procedural helpers). You can use them for blockouts or simple shapes; then clean up and export to UE.
+- **Texturing** – AI can generate or upscale textures; you apply them in Blender or in UE. Keep them consistent with your unified look (same material set / color grade).
+- **Learning** – Use AI (e.g. ChatGPT, Claude) to explain Blender steps, shortcuts, and “how do I make X” so you can follow along without prior art training.
 
-### C++ Implementation (Extend FederationEditor)
-
-**Approach:** Add bulk import functionality directly to the FederationEditor module, similar to how `PlaceActorsFromDataCommand` works.
-
-#### Implementation Details
-- Unreal Engine Python API (`unreal` module)
-- Editor Scripting Utilities plugin (enabled)
-- Python Editor Script Plugin (enabled)
-
-#### Core APIs
-
-**AssetImportTask (Legacy):**
-```python
-import unreal
-
-task = unreal.AssetImportTask()
-task.filename = "path/to/asset.fbx"
-task.destination_path = "/Game/MyAssets"
-task.automated = True  # Avoid dialogs
-task.replace_existing = True
-task.save = True
-unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
-```
-
-**Interchange Framework (Recommended):**
-```python
-import unreal
-
-params = unreal.ImportAssetParameters()
-params.is_automated = True  # Run without UI dialogs
-params.override_pipelines = []  # Custom import pipelines
-# Set callbacks for progress tracking
-unreal.InterchangeManager.import_asset(...)
-```
-
-#### Bulk Import Script Example
-
-```python
-import unreal
-import os
-
-def bulk_import_assets(source_dir, destination_path):
-    """
-    Import all FBX files from source_dir into destination_path
-    """
-    asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
-    tasks = []
-    
-    for root, dirs, files in os.walk(source_dir):
-        for file in files:
-            if file.endswith(('.fbx', '.obj', '.gltf')):
-                source_path = os.path.join(root, file)
-                relative_path = os.path.relpath(root, source_dir)
-                dest_path = os.path.join(destination_path, relative_path).replace('\\', '/')
-                
-                task = unreal.AssetImportTask()
-                task.filename = source_path
-                task.destination_path = dest_path
-                task.automated = True
-                task.replace_existing = True
-                task.save = True
-                tasks.append(task)
-    
-    if tasks:
-        asset_tools.import_asset_tasks(tasks)
-        print(f"Imported {len(tasks)} assets")
-
-# Usage
-bulk_import_assets("C:/MyAssets", "/Game/ImportedAssets")
-```
-
-#### Implementation Details
-- **New Class:** `FBulkImportAssetsCommand` in `Source/federationEditor/BulkImportAssetsCommand.h/cpp`
-- **API:** Use `IAssetTools::ImportAssetsAutomated()` or `UAssetImportTask` with `bAsync = true` for scalability
-- **Dependencies:** Add `AssetTools` module to `federationEditor.Build.cs`
-- **Integration:** Register in `FfederationEditorModule::StartupModule()` alongside `PlaceActorsFromDataCommand`
-- **Menu:** Add to Tools → Federation menu (same location as "Place Actors From Data")
-- **Scalability Features:**
-  - **Async Import:** Use `UAssetImportTask::bAsync = true` for concurrent imports (critical for thousands of assets)
-  - **Batch Processing:** Process in chunks (e.g., 100 assets at a time) to avoid editor freezing
-  - **Progress Tracking:** Show progress bar/dialog for large batches
-  - **Error Handling:** Continue on failure, log errors to file for review
-  - **Folder Structure:** Preserve source directory structure in Content/
-- **Advantages:** 
-  - Consistent with existing codebase
-  - No Python dependency
-  - Better integration with UE5 editor systems
-  - Can share code/utilities with placement system
-  - Async support for handling thousands of assets efficiently
-
-### Integration with Existing Workflow
-
-#### Extend FederationEditor Module
-- **Current:** `PlaceActorsFromDataCommand` places actors from JSON data (assumes assets already exist)
-- **Extension:** Add bulk import functionality to FederationEditor
-- **New Command:** `BulkImportAssetsCommand` - Import external assets (FBX, OBJ, GLTF) into UE5
-- **Workflow:** Import assets → Place actors using imported assets (both via FederationEditor)
-
-#### Implementation Approach
-- **Add to FederationEditor:** New C++ class `FBulkImportAssetsCommand` in `Source/federationEditor/`
-- **Menu Integration:** Add to same Tools → Federation menu alongside "Place Actors From Data"
-- **Functionality:** 
-  - Scan directory recursively for asset files (FBX, OBJ, GLTF, textures: PNG, TGA, EXR)
-  - Import using `IAssetTools::ImportAssetsAutomated()` or `UAssetImportTask` with async support
-  - Maintain folder structure from source (mirror directory tree in Content/)
-  - Generate import manifest/log (JSON or text file) listing imported assets and paths
-  - Handle import settings per asset type (static mesh vs texture vs material)
-  - Progress dialog with cancel option for large batches
-- **UI:** Simple dialog (Slate widget) to:
-  - Select source directory
-  - Select destination path in Content/ (default: `/Game/Imported/`)
-  - Choose asset types to import (meshes, textures, or both)
-  - Configure import settings (optional: LOD import, material creation, etc.)
-  - Show progress bar and estimated time remaining
-
-### Scalability Considerations
-
-#### Handling Thousands of Assets
-- **Async Import:** Critical - use `UAssetImportTask::bAsync = true` to import multiple assets concurrently
-- **Batch Size:** Process in chunks (100-500 assets per batch) to avoid editor freezing
-- **Memory Management:** Clear completed tasks, don't hold references to all assets in memory
-- **Progress Updates:** Use delegates/callbacks to update UI without blocking import thread
-- **Error Recovery:** Continue importing remaining assets even if some fail
-
-#### Asset Organization Strategy
-- **Folder Structure:** Mirror source directory structure in Content/ (e.g., `Source/Props/Ships/` → `/Game/Imported/Props/Ships/`)
-- **Naming Conventions:** Document standards (e.g., `SM_` prefix for static meshes, `T_` for textures)
-- **Duplicate Detection:** Check if asset already exists before importing (optional: skip or replace)
-- **Asset Types:** Separate meshes, textures, materials into logical folders
-
-#### Import Settings
-- **Per-Type Settings:** Different settings for static meshes vs textures vs materials
-- **LOD Import:** Option to import LODs if available in source files
-- **Material Creation:** Auto-create materials for imported meshes (or use existing materials)
-- **Texture Settings:** Compression, sRGB, mip generation per texture type
-
-### Recommendations
-
-1. **Extend FederationEditor** - Use existing module rather than separate system
-2. **C++ Implementation Only** - No Python scripts, use `IAssetTools` and `UAssetImportTask` APIs
-3. **Async Import** - Essential for scalability (thousands of assets)
-4. **Two-step workflow** - Import assets first, then place actors (both via FederationEditor)
-5. **Progress Tracking** - Show progress bar and estimated time for large batches
-6. **Error Handling** - Log failures to file, continue with remaining assets
-7. **Batch Processing** - Process in chunks to avoid editor freezing
-8. **Future Enhancement:** Combined workflow - JSON can reference external files, auto-import then place
+Workflow: concept (AI or ref) → Blender (model, optional AI help) → export FBX/GLTF → import into UE and assign from your shared materials. Action items for “set up Blender pipeline” or “try AI add-on X” can live on the task board, not in this doc.
 
 ---
 
-## Proposed Solution
+## 5. Variety (So Two Placements Don’t Look Identical)
 
-### MVP Scope (Minimum Viable Product)
-
-**Core Goal:** Enable bulk importing of assets without manual work, scalable to thousands of assets.
-
-**MVP Includes:**
-- Phase 1: Research/documentation (this document)
-- Phase 4: Bulk Import Automation (core functionality)
-
-**MVP Excludes (Nice-to-Have):**
-- Phase 2: Custom Asset Pipeline (can use existing Blender workflow manually)
-- Phase 3: Variety System (ISM already works via GalaxyStarField; can extend later)
-- Phase 5: Integration (can be done manually; automation is future enhancement)
-
-### Phase 1: Asset Acquisition (Research - No Implementation)
-1. **Set up Fab account** - Access free rotating assets
-2. **Download key free packs** - Sci-fi space assets, Megascans surfaces
-3. **Identify gaps** - List assets we need but don't have
-4. **Purchase if needed** - Buy specific packs for gaps
-
-**Status:** Documentation/research only - no code changes needed.
-
-### Phase 2: Custom Asset Pipeline (Documentation - No Implementation)
-1. **Set up Blender workflow** - Install, configure export settings
-2. **Create asset templates** - Base meshes for common types
-3. **Document standards** - Naming, scale, pivot, LOD requirements
-4. **Build initial custom assets** - Unique game-specific content
-
-**Status:** Documentation/standards - no code changes needed. Can be done manually.
-
-### Phase 3: Variety System (Future Enhancement - Not MVP)
-1. **Extend ISM system** - Already works via GalaxyStarField; extend to other asset types
-2. **Create variation materials** - Per-instance custom data materials
-3. **Build variation presets** - Common variation sets
-4. **Integrate with placement system** - Apply variations during JSON placement
-
-**Status:** Future enhancement. ISM already proven scalable with GalaxyStarField (handles 10,000+ stars). Can extend later.
-
-### Phase 4: Bulk Import Automation (MVP - Core Implementation)
-
-**Goal:** Import thousands of assets efficiently without manual work.
-
-1. **Extend FederationEditor** - Add `FBulkImportAssetsCommand` class
-2. **Implement async import** - Use `UAssetImportTask` with `bAsync = true` for scalability
-3. **Add progress tracking** - Progress dialog with cancel option
-4. **Add menu command** - Tools → Federation → Bulk Import Assets
-5. **Test with sample assets** - Verify import, organization, placement workflow
-6. **Document workflow** - How to use bulk import tool (import → place actors)
-
-**Implementation Details:**
-- **Dependencies:** Add `AssetTools` module to `federationEditor.Build.cs`
-- **API:** Use `IAssetTools::ImportAssetsAutomated()` or `UAssetImportTask` with async
-- **UI:** Slate dialog for source directory, destination path, progress bar
-- **Error Handling:** Log failures, continue with remaining assets
-- **Scalability:** Process in batches (100-500 assets), async import, progress updates
-
-**Acceptance Criteria:**
-- Can import 1000+ assets without editor freezing
-- Preserves folder structure from source
-- Shows progress and estimated time
-- Generates import log/manifest
-- Handles errors gracefully (continues on failure)
-
-### Phase 5: Integration (Future Enhancement - Not MVP)
-1. **Combine workflows** - Import → Place → Vary (automated end-to-end)
-2. **Create end-to-end pipeline** - From asset source to placed instance
-3. **Document complete workflow** - Step-by-step guide
-4. **Test at scale** - Import and place hundreds/thousands of assets
-
-**Status:** Future enhancement. MVP workflow is manual: Import assets → Place actors (both via FederationEditor). Automation can come later.
+- **Instanced Static Meshes (ISM)** – Same mesh, many instances; use for repeated props. We already use this at scale (e.g. GalaxyStarField).
+- **Per-instance variation** – Vary scale, rotation, and (where the material supports it) color or a couple of parameters via per-instance data or material parameters. That gives variety without new art.
+- **A few variants** – Where it matters, use 2–3 mesh variants (e.g. “crate A”, “crate B”) and place them via the same placement system. No need to document every variation technique here; task board can hold “add variation to placement” type items.
 
 ---
 
-## Review: MVP & Scalability
+## 6. Bulk Import (No Python)
 
-### Is This an MVP?
+We don’t want to manually import thousands of assets. The approach:
 
-**Yes** - The MVP focuses on Phase 4 (Bulk Import Automation) which solves the core problem: importing thousands of assets without manual work.
+- **Extend FederationEditor** – Add a **Bulk Import** flow next to “Place Actors From Data”: same menu (e.g. Tools → Federation), implemented in **C++**.
+- **Behaviour** – User picks a source folder and a Content destination. Tool scans for supported types (e.g. FBX, OBJ, GLTF, PNG, TGA), imports in batches using **IAssetTools** and **UAssetImportTask** (with async where possible), keeps folder structure, and writes a small import log. Progress bar and “cancel” for large runs.
+- **No Python** – All logic in C++ (and Slate for the dialog). Unreal’s native APIs are used; no Python or other scripting for this pipeline.
 
-**Phases 1-2:** Research/documentation only - no implementation needed.
-**Phase 3:** Future enhancement - ISM already proven scalable.
-**Phase 5:** Future enhancement - manual workflow is acceptable for MVP.
-
-### Is This Scalable?
-
-**Yes** - The proposal addresses scalability:
-
-1. **Async Import:** `UAssetImportTask::bAsync = true` enables concurrent imports (critical for thousands)
-2. **Batch Processing:** Process in chunks (100-500 assets) to avoid editor freezing
-3. **Progress Tracking:** Shows progress without blocking import thread
-4. **Error Recovery:** Continues on failure, logs errors for review
-5. **Memory Management:** Clears completed tasks, doesn't hold all assets in memory
-6. **Proven Pattern:** GalaxyStarField already handles 10,000+ instances efficiently
-
-**Potential Scalability Concerns:**
-- **Editor Performance:** Large batches might slow editor - mitigated by async + batching
-- **Disk I/O:** Many simultaneous file operations - mitigated by async import
-- **Memory:** Large asset files - mitigated by processing in batches
-
-**Recommendations for Maximum Scalability:**
-- Use async import (`bAsync = true`) - essential
-- Process in batches (100-500 assets per batch)
-- Show progress but don't block import thread
-- Consider background thread for file scanning (UI thread for import)
-- Test with 1000+ assets to validate scalability
-
-### C++ Only Approach
-
-**Confirmed** - All implementation will be in C++:
-- No Python scripts
-- Use `IAssetTools` and `UAssetImportTask` APIs
-- Extend FederationEditor module
-- Consistent with existing codebase
-
-## Next Steps
-
-1. **Review this document** - Get feedback on MVP scope and scalability approach
-2. **Approve MVP scope** - Confirm Phase 4 is the MVP (Phases 1-2 are research, 3 & 5 are future)
-3. **Start Phase 4 implementation** - Build `FBulkImportAssetsCommand` in FederationEditor
-4. **Test scalability** - Validate with 1000+ assets before considering complete
+Concrete implementation tasks (e.g. “add FBulkImportAssetsCommand”, “add progress dialog”) can be created as action items on the task board when you’re ready.
 
 ---
 
-## References
+## MVP: Importing one human
+
+1. **Obtain one human character FBX** (e.g. from [Mixamo](https://mixamo.com) or Epic Marketplace free "Animation Starter Pack" / a free character pack). Place it in **`Config/ImportSource/Human/`** (rename to `Human.fbx` if you want the default placement preset to work without editing).
+2. In Unreal Editor: **Tools → Federation → Import Assets**. Assets are imported to **Content/Characters/Human**.
+3. Open a level, then **Tools → Federation → Place Actors From Data → Human**. One human appears in the level (at 0, 0, 100 by default).
+4. If your FBX has a different name, the imported asset path will differ. Edit **`Config/PlacementData/Human.json`** and set `Properties.SkeletalMesh` to the actual asset path (e.g. `/Game/Characters/Human/YourFileName.YourFileName`). Run Place Actors From Data → Human again.
+
+**Credits:** Add any third-party human (or other) asset to the repo's **`CREDITS.md`** (same format as the existing Milky Way skybox entry: work, author, source URL, license). Do this when you add the asset so you stay legally clear.
+
+---
+
+## 7. References
 
 - [IAssetTools::ImportAssetsAutomated](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Developer/AssetTools/IAssetTools/ImportAssetsAutomated)
 - [UAssetImportTask](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Editor/UnrealEd/UAssetImportTask)
-- [Epic Games Fab Free Content](https://unrealengine.com/en-US/fabfreecontent)
-- [Blender to Unreal Essentials](https://dev.epicgames.com/community/learning/tutorials/Ed4W/unreal-engine-blender-to-unreal-essentials)
-- [Instanced Static Meshes with Efficient Materials](https://dev.epicgames.com/community/learning/tutorials/33oJ/unreal-engine-using-instanced-static-meshes-with-efficient-materials)
+- [Epic Fab free content](https://unrealengine.com/en-US/fabfreecontent)
+- [Blender to Unreal](https://dev.epicgames.com/community/learning/tutorials/Ed4W/unreal-engine-blender-to-unreal-essentials)

@@ -50,6 +50,10 @@ alwaysApply: true
 - Commit frequently
 - Write tests for new C++ code
 
+## Testing (main worktree)
+
+Test changes on the **main worktree** (repo root): that's where the uproject and cached files live. You cannot have the same branch checked out in two worktrees. When the worktree work is ready to test: push the branch, remove the worktree, switch the main worktree to that branch, pull, then suggest project reload or hot reload in the editor.
+
 ## Quick ref
 
 ```bash

@@ -8,6 +8,9 @@
 #include "Editor.h"
 #include "Engine/World.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/SkeletalMesh.h"
+#include "Engine/SkeletalMeshActor.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
@@ -335,6 +338,18 @@ void FPlaceActorsFromDataCommand::Execute(const FString& RelativeFileName)
 			if (ASkySphere* SkySphere = Cast<ASkySphere>(Spawned))
 			{
 				SkySphere->UpdateSkyMaterial();
+			}
+			if (ASkeletalMeshActor* SkeletalActor = Cast<ASkeletalMeshActor>(Spawned))
+			{
+				FString MeshPath;
+				if (MergedProps->TryGetStringField(TEXT("SkeletalMesh"), MeshPath) && !MeshPath.IsEmpty())
+				{
+					USkeletalMesh* Mesh = LoadObject<USkeletalMesh>(nullptr, *MeshPath);
+					if (Mesh && SkeletalActor->GetSkeletalMeshComponent())
+					{
+						SkeletalActor->GetSkeletalMeshComponent()->SetSkeletalMesh(Mesh);
+					}
+				}
 			}
 			SpawnedCount++;
 		}

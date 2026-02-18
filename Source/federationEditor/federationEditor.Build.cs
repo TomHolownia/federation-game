@@ -15,6 +15,7 @@ public class federationEditor : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			"AssetTools",
 			"UnrealEd",
 			"LevelEditor",
 			"ToolMenus",
