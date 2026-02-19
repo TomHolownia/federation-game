@@ -14,6 +14,8 @@ Explore a living galaxy, build your fleet, and engage in epic battles across the
 
 🚧 **Early Development** - Setting up core infrastructure
 
+**Play:** Default Game Mode spawns a third-person character (FED-030). Collision uses engine channels: **Pawn** (character capsule), **WorldStatic** (terrain/props), **Vehicle** (reserved for ships).
+
 ## Getting Started
 
 - **First-time setup:** Full step-by-step (Git, Visual Studio, Unreal Engine, clone, open project) is in **[INSTALLATION.md](INSTALLATION.md)**.
