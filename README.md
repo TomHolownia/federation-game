@@ -85,7 +85,7 @@ federation-game/
 - [INSTALLATION.md](INSTALLATION.md) - Complete setup guide
 - Task board is in **Confluence** only (federationgame.atlassian.net); use Confluence MCP (`.cursor/mcp.json.example`)
 - `docs/technical/` - Technical documentation
-  - [AI workflow & galaxy-scale](docs/technical/ai-workflow-and-galaxy-scale.md) - Placement, World Partition, and **level streaming** (galaxy → solar system → planet, transitions, atmosphere, cities)
+  - [AI workflow & galaxy-scale](docs/technical/ai-workflow-and-galaxy-scale.md) - Placement, **World Partition** (one level, ~36 locations, floating origin, warp), planets (gravity, flat/curved), cities
 
 ## License
 
