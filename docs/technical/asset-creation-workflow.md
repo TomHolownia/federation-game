@@ -4,16 +4,19 @@
 
 We automate placement via FederationEditor and levels, but we need many assets for a galaxy. This doc covers: where to get them, how to keep a unified look, how to credit creators, how to create/vary assets (including with Blender + AI), and how to bulk import. All tooling stays in **C++ and Unreal Editor**—no Python. (Unreal uses C++ for code, not C#.)
 
+**Strategy:** Hybrid approach—use **AI + Blender for hero/signature content**; use **free assets** for the rest. Stick to **free stuff for now** (public domain / permissive where possible). Store assets in **this repo with Git LFS**; no separate assets repo. Track binary types (e.g. `*.fbx`, `*.uasset`) with `git lfs track` so the repo stays manageable.
+
 ---
 
 ## 1. Where to Get Assets
 
-Using multiple sources is fine. Common options:
+Using multiple sources is fine. For now we stick to free sources:
 
+- **UE Marketplace (free)** – [unrealengine.com/marketplace/free](https://www.unrealengine.com/marketplace/en-US/free). Best starting point for an **actor with animations**: **[Animation Starter Pack](https://www.unrealengine.com/marketplace/en-US/product/animation-starter-pack)** (Epic, free). Adds the classic Mannequin plus 62 animations; add via Marketplace “Add to Project” and the content appears in your project. Standard License; add Epic to `CREDITS.md` if required.
 - **Fab / Epic free content** – [fab.com](https://fab.com), [unrealengine.com/fabfreecontent](https://unrealengine.com/en-US/fabfreecontent). Rotating and permanent free packs; check per-asset license.
-- **UE Marketplace (free)** – [unrealengine.com/marketplace/free](https://www.unrealengine.com/marketplace/en-US/free).
 - **Megascans (Quixel Bridge)** – Free for UE; good for surfaces, nature. Built into UE.
-- **Paid packs** – e.g. POLYGON Sci-Fi Space, Space Frontier; use when free options don’t cover a need.
+- **Mixamo** – Free humanoid characters and animations; download FBX and use our **Import Assets** flow (Bulk Import).
+- **Paid packs** – Optional later (e.g. POLYGON Sci-Fi Space); use when free options don’t cover a need.
 
 ---
 
@@ -78,18 +81,20 @@ Concrete implementation tasks (e.g. “add FBulkImportAssetsCommand”, “add p
 
 ---
 
-## MVP: Importing one human
+## 7. Place Actors From Data – Making Placed Assets Visible
 
-1. **Obtain one human character FBX** (e.g. from [Mixamo](https://mixamo.com) or Epic Marketplace free "Animation Starter Pack" / a free character pack). Place it in **`Config/ImportSource/Human/`** (rename to `Human.fbx` if you want the default placement preset to work without editing).
-2. In Unreal Editor: **Tools → Federation → Import Assets**. Assets are imported to **Content/Characters/Human**.
-3. Open a level, then **Tools → Federation → Place Actors From Data → Human**. One human appears in the level (at 0, 0, 100 by default).
-4. If your FBX has a different name, the imported asset path will differ. Edit **`Config/PlacementData/Human.json`** and set `Properties.SkeletalMesh` to the actual asset path (e.g. `/Game/Characters/Human/YourFileName.YourFileName`). Run Place Actors From Data → Human again.
+So that **Tools → Federation → Place Actors From Data** always shows assets (no invisible or placeholder actors), use this pattern for every new asset type:
 
-**Credits:** Add any third-party human (or other) asset to the repo's **`CREDITS.md`** (same format as the existing Milky Way skybox entry: work, author, source URL, license). Do this when you add the asset so you stay legally clear.
+1. **Reflection first** – Put asset references (mesh, material, etc.) in the placement JSON under **Properties** with the same key names as the **UPROPERTY** on the actor or its components. The placement code applies these via **ApplyPropertiesFromJson** to the actor and, where relevant, to the component (e.g. SkeletalMeshComponent). That way the correct asset is assigned by path without custom code per type.
+2. **Apply to components** – If the asset lives on a **component** (e.g. SkeletalMesh on USkeletalMeshComponent), the code also runs **ApplyPropertiesFromJson** on that component so reflection can set the property. See `PlaceActorsFromDataCommand.cpp`: after applying to the actor, it applies the same MergedProps to any SkeletalMeshComponent.
+3. **Defaults and fallbacks** – After reflection, the placement code runs type-specific blocks that: fill **defaults** if a required property is still null (e.g. StarMesh/StarMaterial for GalaxyStarField), then **apply to the component** (e.g. RegenerateStars(), SetSkeletalMesh). For engine actors whose component doesn't expose the property to reflection, the code resolves the asset from the JSON path and uses **fallbacks** (e.g. known paths or Asset Registry search) so the mesh is set anyway.
+4. **New asset types** – When adding a new placeable type: (a) Prefer **UPROPERTY** on the actor for the main asset so reflection can set it from JSON. (b) In the placement command, after **ApplyPropertiesFromJson(Spawned, MergedProps)**, apply MergedProps to the relevant component if the asset is on the component. (c) Add a type-specific block that sets defaults if null and then updates the component (e.g. set mesh, call RegenerateStars). This keeps placed actors visible by default.
+
+Config presets live in **Config/PlacementData/** (one `.json` per preset). See **Config/PlacementData/README.txt** for JSON format and how to fix asset paths.
 
 ---
 
-## 7. References
+## 8. References
 
 - [IAssetTools::ImportAssetsAutomated](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Developer/AssetTools/IAssetTools/ImportAssetsAutomated)
 - [UAssetImportTask](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Editor/UnrealEd/UAssetImportTask)
