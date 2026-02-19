@@ -356,6 +356,7 @@ void FPlaceActorsFromDataCommand::Execute(const FString& RelativeFileName)
 					if (!Mesh)
 					{
 						const TCHAR* Fallbacks[] = {
+							TEXT("/Game/AnimStarterPack/UE4_Mannequin/Mesh/SK_Mannequin.SK_Mannequin"),
 							TEXT("/Game/AnimationStarterPack/Character/Mesh/UE4_Mannequin.UE4_Mannequin"),
 							TEXT("/Game/AnimationStarterPack/Character/Mesh/SKM_Mannequin.SKM_Mannequin"),
 							TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny.SKM_Manny"),
