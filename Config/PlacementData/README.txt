@@ -13,3 +13,8 @@ SkeletalMeshActor (Human.json, Mannequin.json):
   Set "Properties.SkeletalMesh" to the asset path. If the path is wrong (e.g. pack installed
   elsewhere), the code tries fallback paths and an Asset Registry search for "Mannequin"/"Manny".
   To fix manually: Content Browser -> right-click the mesh -> Copy Reference, paste into the JSON.
+
+SmallPlanet.json (FED-029):
+  Flat floor (static mesh) + directional light + sky light for a small planet playable space.
+  Set "Defaults.FloorRadius" (half-extent in X/Y in world units; default 50 = 100x100 floor).
+  The floor actor uses the Cube mesh; scale is driven by FloorRadius. Use for Phase 1 test levels.

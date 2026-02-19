@@ -8,7 +8,9 @@
 #include "Editor.h"
 #include "Engine/World.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
 #include "Engine/SkeletalMesh.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/FileHelper.h"
@@ -106,6 +108,11 @@ namespace
 				if ((*DefaultsObj)->TryGetStringField(TEXT("StarMesh"), S)) Merged->SetStringField(TEXT("StarMesh"), S);
 				if ((*DefaultsObj)->TryGetStringField(TEXT("StarMaterial"), S)) Merged->SetStringField(TEXT("StarMaterial"), S);
 			}
+			double FloorRadiusDefault = 0.0;
+			if ((*DefaultsObj)->TryGetNumberField(TEXT("FloorRadius"), FloorRadiusDefault) && FloorRadiusDefault > 0.0)
+			{
+				Merged->SetNumberField(TEXT("FloorRadius"), FloorRadiusDefault);
+			}
 		}
 		const TSharedPtr<FJsonObject>* ActorProps = nullptr;
 		if (ActorObj->TryGetObjectField(TEXT("Properties"), ActorProps) && ActorProps->IsValid())
@@ -116,6 +123,12 @@ namespace
 		FString S;
 		if (ActorObj->TryGetStringField(TEXT("StarMesh"), S)) Merged->SetStringField(TEXT("StarMesh"), S);
 		if (ActorObj->TryGetStringField(TEXT("StarMaterial"), S)) Merged->SetStringField(TEXT("StarMaterial"), S);
+		// Per-actor FloorRadius (or in Properties) overrides Defaults.FloorRadius for Small Planet floor scale
+		double FloorRadiusActor = 0.0;
+		if (ActorObj->TryGetNumberField(TEXT("FloorRadius"), FloorRadiusActor) && FloorRadiusActor > 0.0)
+		{
+			Merged->SetNumberField(TEXT("FloorRadius"), FloorRadiusActor);
+		}
 		return Merged;
 	}
 }
@@ -321,6 +334,29 @@ void FPlaceActorsFromDataCommand::Execute(const FString& RelativeFileName)
 				if (USkeletalMeshComponent* SMC = Spawned->FindComponentByClass<USkeletalMeshComponent>())
 				{
 					ApplyPropertiesFromJson(SMC, MergedProps);
+				}
+				if (UStaticMeshComponent* SMComp = Spawned->FindComponentByClass<UStaticMeshComponent>())
+				{
+					ApplyPropertiesFromJson(SMComp, MergedProps);
+				}
+			}
+			// StaticMeshActor: default mesh if null (e.g. Small Planet floor); FloorRadius drives scale (radius = half-extent, scale XY = Radius/50, Z = 0.2)
+			if (AStaticMeshActor* StaticMeshActor = Cast<AStaticMeshActor>(Spawned))
+			{
+				UStaticMeshComponent* SMComp = StaticMeshActor->GetStaticMeshComponent();
+				if (SMComp && !SMComp->GetStaticMesh())
+				{
+					UStaticMesh* DefaultCube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+					if (DefaultCube)
+					{
+						SMComp->SetStaticMesh(DefaultCube);
+					}
+				}
+				double FloorRadius = 0.0;
+				if (MergedProps->TryGetNumberField(TEXT("FloorRadius"), FloorRadius) && FloorRadius > 0.0)
+				{
+					const float R = static_cast<float>(FloorRadius);
+					Spawned->SetActorScale3D(FVector(R / 50.f, R / 50.f, 0.2f));
 				}
 			}
 			AGalaxyStarField* StarField = Cast<AGalaxyStarField>(Spawned);
