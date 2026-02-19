@@ -1,6 +1,7 @@
 // Copyright Federation Game. All Rights Reserved.
 
 #include "federationEditor.h"
+#include "BulkImportAssetsCommand.h"
 #include "PlaceActorsFromDataCommand.h"
 #include "LevelEditor.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
@@ -13,10 +14,12 @@
 void FfederationEditorModule::StartupModule()
 {
 	FPlaceActorsFromDataCommand::Register();
+	FBulkImportAssetsCommand::Register();
 }
 
 void FfederationEditorModule::ShutdownModule()
 {
+	FBulkImportAssetsCommand::Unregister();
 	FPlaceActorsFromDataCommand::Unregister();
 }
 

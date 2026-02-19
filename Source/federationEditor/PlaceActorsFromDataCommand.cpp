@@ -8,6 +8,8 @@
 #include "Editor.h"
 #include "Engine/World.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/SkeletalMesh.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
@@ -22,6 +24,8 @@
 #include "Engine/Selection.h"
 #include "Logging/LogMacros.h"
 #include "ToolMenu.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPlaceActors, Log, All);
 
@@ -31,17 +35,17 @@ namespace
 {
 	static FName PlaceActorsFromDataCommandName(TEXT("PlaceActorsFromData"));
 
-	/** Apply JSON key-value pairs to actor properties via reflection. Works for any actor type. */
-	void ApplyPropertiesFromJson(AActor* Actor, const TSharedPtr<FJsonObject>& PropsObj)
+	/** Apply JSON key-value pairs to object properties via reflection. Works for any UObject (actor or component). */
+	void ApplyPropertiesFromJson(UObject* Obj, const TSharedPtr<FJsonObject>& PropsObj)
 	{
-		if (!Actor || !PropsObj.IsValid()) return;
-		UClass* Class = Actor->GetClass();
+		if (!Obj || !PropsObj.IsValid()) return;
+		UClass* Class = Obj->GetClass();
 		for (const auto& Pair : PropsObj->Values)
 		{
 			FProperty* Prop = Class->FindPropertyByName(FName(*Pair.Key));
 			if (!Prop || !Pair.Value.IsValid()) continue;
 			const TSharedPtr<FJsonValue>& Val = Pair.Value;
-			void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Actor);
+			void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Obj);
 			if (FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(Prop))
 			{
 				if (Val->Type != EJson::String) continue;
@@ -311,7 +315,12 @@ void FPlaceActorsFromDataCommand::Execute(const FString& RelativeFileName)
 			TSharedPtr<FJsonObject> MergedProps = MergeProperties(Root, *Obj, ActorClass);
 			if (MergedProps->Values.Num() > 0)
 			{
+				// Pattern for visible placed assets (see docs/technical/asset-creation-workflow.md §7): apply to actor then to component so reflection sets asset refs; then type-specific block fills defaults and applies to component.
 				ApplyPropertiesFromJson(Spawned, MergedProps);
+				if (USkeletalMeshComponent* SMC = Spawned->FindComponentByClass<USkeletalMeshComponent>())
+				{
+					ApplyPropertiesFromJson(SMC, MergedProps);
+				}
 			}
 			AGalaxyStarField* StarField = Cast<AGalaxyStarField>(Spawned);
 			if (StarField)
@@ -335,6 +344,60 @@ void FPlaceActorsFromDataCommand::Execute(const FString& RelativeFileName)
 			if (ASkySphere* SkySphere = Cast<ASkySphere>(Spawned))
 			{
 				SkySphere->UpdateSkyMaterial();
+			}
+			// If JSON had SkeletalMesh but component still has none (reflection may not apply to engine component), set it manually with fallbacks (same pattern as StarField defaults)
+			FString MeshPath;
+			if (MergedProps->TryGetStringField(TEXT("SkeletalMesh"), MeshPath) && !MeshPath.IsEmpty())
+			{
+				if (USkeletalMeshComponent* SMC = Spawned->FindComponentByClass<USkeletalMeshComponent>())
+				{
+					USkeletalMesh* Mesh = LoadObject<USkeletalMesh>(nullptr, *MeshPath);
+					// Fallback: hardcoded paths when the pack installed to a different folder
+					if (!Mesh)
+					{
+						const TCHAR* Fallbacks[] = {
+							TEXT("/Game/AnimStarterPack/UE4_Mannequin/Mesh/SK_Mannequin.SK_Mannequin"),
+							TEXT("/Game/AnimationStarterPack/Character/Mesh/UE4_Mannequin.UE4_Mannequin"),
+							TEXT("/Game/AnimationStarterPack/Character/Mesh/SKM_Mannequin.SKM_Mannequin"),
+							TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny.SKM_Manny"),
+							TEXT("/Engine/EngineMeshes/SkeletalMesh/DefaultCharacter.DefaultCharacter"),
+						};
+						for (const TCHAR* Path : Fallbacks)
+						{
+							if (FString(Path) != MeshPath && (Mesh = LoadObject<USkeletalMesh>(nullptr, Path)) != nullptr)
+								break;
+						}
+					}
+					// Fallback: search Asset Registry for any SkeletalMesh whose name contains "Mannequin" or "Manny"
+					if (!Mesh)
+					{
+						IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
+						FARFilter Filter;
+						Filter.ClassPaths.Add(USkeletalMesh::StaticClass()->GetClassPathName());
+						Filter.PackagePaths.Add(FName("/Game"));
+						Filter.bRecursivePaths = true;
+						TArray<FAssetData> AssetDataList;
+						AssetRegistry.GetAssets(Filter, AssetDataList);
+						for (const FAssetData& AssetData : AssetDataList)
+						{
+							FString Name = AssetData.AssetName.ToString();
+							if (Name.Contains(TEXT("Mannequin"), ESearchCase::IgnoreCase) || Name.Contains(TEXT("Manny"), ESearchCase::IgnoreCase) || Name.Contains(TEXT("UE4_Mannequin"), ESearchCase::IgnoreCase))
+							{
+								const FString Path = AssetData.GetSoftObjectPath().ToString();
+								Mesh = LoadObject<USkeletalMesh>(nullptr, *Path);
+								if (Mesh) break;
+							}
+						}
+					}
+					if (Mesh)
+					{
+						SMC->SetSkeletalMesh(Mesh);
+					}
+					else
+					{
+						UE_LOG(LogPlaceActors, Warning, TEXT("SkeletalMesh not found at '%s'. No mannequin/manny mesh in /Game. Copy asset reference from Content Browser into Config/PlacementData JSON."), *MeshPath);
+					}
+				}
 			}
 			SpawnedCount++;
 		}

@@ -1,0 +1,13 @@
+{
+  "Actors": [
+    {
+      "Class": "/Script/Engine.SkeletalMeshActor",
+      "Location": [0, 0, 100],
+      "Rotation": [0, 0, 0],
+      "Scale": [1, 1, 1],
+      "Properties": {
+        "SkeletalMesh": "/Game/Characters/Human/Human.Human"
+      }
+    }
+  ]
+}
