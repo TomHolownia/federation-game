@@ -26,6 +26,7 @@
 #include "ToolMenu.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
+#include "UObject/SoftObjectPath.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPlaceActors, Log, All);
 
@@ -345,58 +346,74 @@ void FPlaceActorsFromDataCommand::Execute(const FString& RelativeFileName)
 			{
 				SkySphere->UpdateSkyMaterial();
 			}
-			// If JSON had SkeletalMesh but component still has none (reflection may not apply to engine component), set it manually with fallbacks (same pattern as StarField defaults)
-			FString MeshPath;
-			if (MergedProps->TryGetStringField(TEXT("SkeletalMesh"), MeshPath) && !MeshPath.IsEmpty())
+			// SkeletalMeshActor / Mannequin: ensure component has a mesh so it never shows as a white dot (same pattern as GalaxyStarField defaults).
+			if (USkeletalMeshComponent* SMC = Spawned->FindComponentByClass<USkeletalMeshComponent>())
 			{
-				if (USkeletalMeshComponent* SMC = Spawned->FindComponentByClass<USkeletalMeshComponent>())
+				FString MeshPath;
+				MergedProps->TryGetStringField(TEXT("SkeletalMesh"), MeshPath);
+				USkeletalMesh* Mesh = nullptr;
+				auto TryLoadMesh = [](const FString& Path) -> USkeletalMesh*
 				{
-					USkeletalMesh* Mesh = LoadObject<USkeletalMesh>(nullptr, *MeshPath);
-					// Fallback: hardcoded paths when the pack installed to a different folder
-					if (!Mesh)
+					if (Path.IsEmpty()) return nullptr;
+					USkeletalMesh* M = LoadObject<USkeletalMesh>(nullptr, *Path);
+					if (!M)
 					{
-						const TCHAR* Fallbacks[] = {
-							TEXT("/Game/AnimStarterPack/UE4_Mannequin/Mesh/SK_Mannequin.SK_Mannequin"),
-							TEXT("/Game/AnimationStarterPack/Character/Mesh/UE4_Mannequin.UE4_Mannequin"),
-							TEXT("/Game/AnimationStarterPack/Character/Mesh/SKM_Mannequin.SKM_Mannequin"),
-							TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny.SKM_Manny"),
-							TEXT("/Engine/EngineMeshes/SkeletalMesh/DefaultCharacter.DefaultCharacter"),
-						};
-						for (const TCHAR* Path : Fallbacks)
+						M = Cast<USkeletalMesh>(FSoftObjectPath(Path).TryLoad());
+					}
+					return M;
+				};
+				if (!MeshPath.IsEmpty())
+				{
+					Mesh = TryLoadMesh(MeshPath);
+				}
+				const TCHAR* Fallbacks[] = {
+					TEXT("/Game/AnimStarterPack/UE4_Mannequin/Mesh/SK_Mannequin.SK_Mannequin"),
+					TEXT("/Game/AnimationStarterPack/Character/Mesh/UE4_Mannequin.UE4_Mannequin"),
+					TEXT("/Game/AnimationStarterPack/Character/Mesh/SKM_Mannequin.SKM_Mannequin"),
+					TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny.SKM_Manny"),
+					TEXT("/Engine/EngineMeshes/SkeletalMesh/DefaultCharacter.DefaultCharacter"),
+				};
+				for (const TCHAR* Path : Fallbacks)
+				{
+					if (!Mesh) Mesh = TryLoadMesh(FString(Path));
+					if (Mesh) break;
+				}
+				if (!Mesh)
+				{
+					IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
+					FARFilter Filter;
+					Filter.ClassPaths.Add(USkeletalMesh::StaticClass()->GetClassPathName());
+					Filter.PackagePaths.Add(FName("/Game"));
+					Filter.bRecursivePaths = true;
+					TArray<FAssetData> AssetDataList;
+					AssetRegistry.GetAssets(Filter, AssetDataList);
+					// Prefer Mannequin/Manny by name
+					for (const FAssetData& AssetData : AssetDataList)
+					{
+						FString Name = AssetData.AssetName.ToString();
+						if (Name.Contains(TEXT("Mannequin"), ESearchCase::IgnoreCase) || Name.Contains(TEXT("Manny"), ESearchCase::IgnoreCase) || Name.Contains(TEXT("UE4_Mannequin"), ESearchCase::IgnoreCase))
 						{
-							if (FString(Path) != MeshPath && (Mesh = LoadObject<USkeletalMesh>(nullptr, Path)) != nullptr)
-								break;
+							Mesh = TryLoadMesh(AssetData.GetSoftObjectPath().ToString());
+							if (Mesh) break;
 						}
 					}
-					// Fallback: search Asset Registry for any SkeletalMesh whose name contains "Mannequin" or "Manny"
-					if (!Mesh)
+					// Last resort: any SkeletalMesh in /Game so we never show a white dot
+					for (const FAssetData& AssetData : AssetDataList)
 					{
-						IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
-						FARFilter Filter;
-						Filter.ClassPaths.Add(USkeletalMesh::StaticClass()->GetClassPathName());
-						Filter.PackagePaths.Add(FName("/Game"));
-						Filter.bRecursivePaths = true;
-						TArray<FAssetData> AssetDataList;
-						AssetRegistry.GetAssets(Filter, AssetDataList);
-						for (const FAssetData& AssetData : AssetDataList)
+						if (!Mesh)
 						{
-							FString Name = AssetData.AssetName.ToString();
-							if (Name.Contains(TEXT("Mannequin"), ESearchCase::IgnoreCase) || Name.Contains(TEXT("Manny"), ESearchCase::IgnoreCase) || Name.Contains(TEXT("UE4_Mannequin"), ESearchCase::IgnoreCase))
-							{
-								const FString Path = AssetData.GetSoftObjectPath().ToString();
-								Mesh = LoadObject<USkeletalMesh>(nullptr, *Path);
-								if (Mesh) break;
-							}
+							Mesh = TryLoadMesh(AssetData.GetSoftObjectPath().ToString());
 						}
+						if (Mesh) break;
 					}
-					if (Mesh)
-					{
-						SMC->SetSkeletalMesh(Mesh);
-					}
-					else
-					{
-						UE_LOG(LogPlaceActors, Warning, TEXT("SkeletalMesh not found at '%s'. No mannequin/manny mesh in /Game. Copy asset reference from Content Browser into Config/PlacementData JSON."), *MeshPath);
-					}
+				}
+				if (Mesh)
+				{
+					SMC->SetSkeletalMesh(Mesh);
+				}
+				else if (!MeshPath.IsEmpty())
+				{
+					UE_LOG(LogPlaceActors, Warning, TEXT("SkeletalMesh not found at '%s'. No skeletal mesh in /Game. Add one or copy asset path from Content Browser into Config/PlacementData/Mannequin.json."), *MeshPath);
 				}
 			}
 			SpawnedCount++;
