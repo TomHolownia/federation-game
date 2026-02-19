@@ -1,0 +1,28 @@
+{
+  "Defaults": {
+    "FloorRadius": 50
+  },
+  "Actors": [
+    {
+      "Class": "/Script/Engine.DirectionalLight",
+      "Location": [0, 0, 500],
+      "Rotation": [-45, 45, 0],
+      "Scale": [1, 1, 1]
+    },
+    {
+      "Class": "/Script/Engine.SkyLight",
+      "Location": [0, 0, 0],
+      "Rotation": [0, 0, 0],
+      "Scale": [1, 1, 1]
+    },
+    {
+      "Class": "/Script/Engine.StaticMeshActor",
+      "Location": [0, 0, -10],
+      "Rotation": [0, 0, 0],
+      "Scale": [1, 1, 1],
+      "Properties": {
+        "StaticMesh": "/Engine/BasicShapes/Cube.Cube"
+      }
+    }
+  ]
+}

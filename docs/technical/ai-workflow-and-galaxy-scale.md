@@ -53,7 +53,7 @@ You do **not** move the editor camera millions of units and place actors there. 
 
 ### Optional MVP path
 
-- **Phase 1:** Small spherical planet (one mesh), local gravity (force toward center), character that walks on it. No level streaming.
+- **Phase 1:** Small spherical planet (one mesh), local gravity (force toward center), character that walks on it. No level streaming. For a **flat** playable space (floor + lighting), use the **SmallPlanet** placement preset (Place Actors From Data → SmallPlanet).
 - **Phase 2:** Place a few buildings on the planet with **curvature-aware** placement: position on sphere + rotation from surface normal so buildings stand straight on the ground.
 
 ---
@@ -80,7 +80,7 @@ The whole galaxy is defined in data. An Editor Utility reads it and spawns actor
 
 The project provides a **Place Actors From Data** command (Level Editor toolbar and **Tools → Federation** menu). It lists all `*.json` files in **Config/PlacementData/**; choose a preset (e.g. **GalaxyMapTest**, **MilkyWaySkybox**) to spawn those actors in the current level. This is the canonical way for an AI agent to "place" actors: add or edit a JSON in that directory, then run the matching preset.
 
-**Presets included:** `GalaxyMapTest.json` (directional light + galaxy star fields), `MilkyWaySkybox.json` (sky sphere for space background). Add more JSON files for custom placement (e.g. specific objects, levels, or procedural setups).
+**Presets included:** `GalaxyMapTest.json` (directional light + galaxy star fields), `MilkyWaySkybox.json` (sky sphere for space background), `SmallPlanet.json` (flat floor + basic lighting for a small planet playable space; see Config/PlacementData/README.txt). Add more JSON files for custom placement (e.g. specific objects, levels, or procedural setups).
 
 **Placement JSON format** (each file in Config/PlacementData/):
 
@@ -104,7 +104,7 @@ The project provides a **Place Actors From Data** command (Level Editor toolbar 
 - **Properties** – (optional) Object of property names to values, applied to the spawned actor via reflection. Works for **any** actor type. Supported: numbers, bools, strings, and asset path strings (for UObject* properties). Example: `"Properties": { "StarMesh": "/Engine/BasicShapes/Shape_Sphere.Shape_Sphere", "StarCount": 5000 }`.
 - **StarMesh** – (optional) Shorthand for `AGalaxyStarField`; same as putting in Properties.
 - **StarMaterial** – (optional) Shorthand for `AGalaxyStarField`; same as putting in Properties.
-- **Defaults** – (optional) Root-level object. `Defaults.Properties` is applied to every actor first; each actor's Properties override. If present, `Defaults.StarMesh` and `Defaults.StarMaterial` apply to all `AGalaxyStarField` entries that don't set their own. Lets one JSON define "all star fields use this mesh/material" without repeating per actor.
+- **Defaults** – (optional) Root-level object. `Defaults.Properties` is applied to every actor first; each actor's Properties override. If present, `Defaults.StarMesh` and `Defaults.StarMaterial` apply to all `AGalaxyStarField` entries that don't set their own. `Defaults.FloorRadius` (number) sets the floor scale for `StaticMeshActor` entries (e.g. Small Planet preset): radius = half-extent in X/Y; scale becomes [Radius/50, Radius/50, 0.2].
 
 **Steps for AI/agents:**
 
