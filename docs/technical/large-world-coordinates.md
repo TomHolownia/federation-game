@@ -1,6 +1,6 @@
 # Large World Coordinates (LWC) in Federation Game
 
-How to enable and use UE5 Large World Coordinates for galaxy-scale positioning, how precision behaves at scale, and how LWC fits with our streaming levels approach.
+How to enable and use UE5 Large World Coordinates for galaxy-scale positioning, how precision behaves at scale, and how LWC fits with our one World Partition level and floating origin.
 
 ## 1. What LWC Is and Why We Use It
 
@@ -64,15 +64,15 @@ See also: `.cursor/rules/unreal-engine.mdc` (use `FVector`, be careful convertin
 
 We don’t need to “test a number” so much as: **enable LWC, use large coordinates, and confirm no jitter or snapping**. If you want a repeatable check, add a simple test level or Automation test that spawns an actor at (1e7, 0, 0), reads back its position, and asserts that the error is below a small threshold (e.g. &lt; 0.01 units).
 
-## 5. Do We Still Need LWC? How Does It Work With Streaming?
+## 5. Do We Still Need LWC? How Does It Work With World Partition and Floating Origin?
 
 ### Do we still need LWC?
 
-**Yes.** Our design is galaxy-scale with one World Partition level for “space” and streamed levels for solar systems and planets. The **galaxy-level** space uses huge coordinates; without LWC we would hit float precision limits (jitter, wrong positions) as soon as we go far from the origin. LWC solves **precision**. Streaming solves **loading and memory**; it does not replace the need for precise coordinates.
+**Yes.** Our design is galaxy-scale with one World Partition level for “space” and a **floating origin** so the player stays near (0,0,0) in engine space. Data and logic still use vast world coordinates (e.g. 10^6+ units between locations). LWC gives **precision** for those coordinates when we compute or render them. The floating origin then keeps the engine operating near the origin. LWC and floating origin work together: precise positions in data, stable rendering and physics in the engine. (We do not use separate streamed levels per solar system or planet.)
 
-### How LWC works with our streaming approach
+### How LWC works with our approach
 
-- **World Partition (galaxy level):** One persistent level for galaxy-scale space. The world is split into **cells**; only cells near the streaming source (e.g. player) are loaded. All cells share the **same world coordinate space**. LWC ensures that every cell’s content, no matter how far from origin, has accurate positions. So:
+- **World Partition:** One persistent level. The world is split into **cells**; only cells near the streaming source (e.g. player) are loaded. All cells share the **same world coordinate space**. LWC ensures that every cell’s content, no matter how far from origin, has accurate positions. So:
   - **LWC** = correct positions in one huge world.
   - **World Partition** = only load cells that are needed, in that same world.
 
@@ -101,7 +101,7 @@ They address different problems and work together: precise coordinates everywher
 | **Use** | Use `FVector`/`FTransform` as usual; avoid casting world positions to `float`. |
 | **Precision** | Double-precision keeps positions stable at galaxy scale; verify by testing at large coordinates (e.g. 1e7) and checking for jitter. |
 | **Still need LWC?** | Yes, for correct galaxy-scale positions. |
-| **LWC + streaming** | LWC = precision in one big world; World Partition = stream cells in that world; streamed levels = load solar system/planet levels. They complement each other. |
+| **LWC + World Partition + floating origin** | LWC = precision for large coordinates; World Partition = stream cells in one world; floating origin = shift world so engine stays near origin. One level for the whole galaxy. |
 | **How to test** | Run automation test `FederationGame.Core.LargeWorldCoordinates.PreservePositionAtLargeScale`; or manually place an actor at 1e8 and check for jitter. |
 
 ---

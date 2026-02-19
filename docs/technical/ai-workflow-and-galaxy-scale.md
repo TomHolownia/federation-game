@@ -24,32 +24,37 @@ Don't hand-place. Use:
 
 ---
 
-## 2. Level streaming and scale architecture
+## 2. World Partition and scale architecture
 
-How we structure levels at galaxy, solar system, and planet scale, and how we transition between them.
+We use **one World Partition level** for the whole playable galaxy. No level streaming between systems: travel between all named locations is seamless. Scope is on the order of **~36 named locations** (planets/systems on the galaxy map), which is manageable in a single world.
 
 ### Level structure
 
-| Scale | Approach |
+| Topic | Approach |
 |-------|----------|
-| **Galaxy** | One level for “space” at galaxy scale. Use **World Partition**: the level is split into cells; only cells near the player load. Author content with the JSON placement tool; World Partition handles chunking and streaming over vast distances. |
-| **Solar system** | **One level per solar system.** When the player enters a system (distance or trigger), **stream in** that system’s level. It contains the star, space around it, and optionally simplified or placeholder planets. Each planet can be its own level. |
-| **Planet** | **One level per planet** (and its content). When the player approaches or enters a planet (e.g. atmosphere boundary), **stream in** that planet’s level. That level holds the surface, cities, towns, etc. Separate level per planet keeps content manageable and lets you set **gravity per level** (e.g. planet level = full gravity, space level = zero). |
+| **World** | **One level** with **World Partition** enabled. This is the only level for galaxy, solar systems, and planets. Keep other levels only for separate flows (e.g. main menu, cinematics) if needed. |
+| **Streaming** | World Partition streams **cells** by distance from the player. Only cells near the player are loaded; the rest is unloaded. Empty space between locations has no content, so vast distances do not make the level huge in memory. |
+| **Floating origin** | Use a **floating origin**: periodically shift the world so the player stays near (0,0,0) in engine space. This avoids float precision issues across vast distances. Distances in data can be millions of units; the engine sees relative positions. |
+| **Travel** | **Warp / jump** (or very high speed) for crossing vast distances so the player does not spend real time flying through empty space. One coordinate space, one level — no level load when moving between locations. |
 
-### Transitions
+### Level design workflow (do not place at huge coordinates)
 
-- **Space → solar system:** Player gets close to a system → trigger/volume or distance check → **stream in** that solar system level. Can be seamless if you stream early enough.
-- **Space → planet (atmosphere):** Player approaches the planet → start streaming the **planet level**. When they cross the **atmosphere boundary** (volume or altitude), you’re now in the planet level. Add **reentry / dust VFX** at that boundary to sell the transition. Gravity can switch here (e.g. space level = 0, planet level = 980).
-- **Mixed gravity in one level:** e.g. space station hangar (gravity) vs outside (no gravity). Use **gravity volumes**: put a physics/gravity volume only in the hangar; world gravity stays 0. When the player is inside the volume they get gravity; when they leave (e.g. out the airlock) they don’t.
+You do **not** move the editor camera millions of units and place actors there. Instead:
 
-### Cities and detail at distance
+- **Author each location at origin (local space):** Build each planet/system as a prefab, blueprint, or block with everything around (0,0,0). You never work at galaxy-scale coordinates in the editor.
+- **Data holds world positions:** A data asset or table stores each location's **world position** in the galaxy (e.g. Earth at (0,0,0), New Mars at (1e9, 2e8, 0)). Coordinates can be vast; they are just numbers in data.
+- **Runtime or tool places content:** At runtime (or in a build/editor step), spawn or position each block at its world coordinates. Floating origin is applied so the engine always operates near the origin. Placement-from-data (e.g. Place Actors From Data) can write world positions from this table; the level itself is authored in local chunks.
 
-Don’t try to render full cities from orbit. Use a **single “distant” representation** until the player is close:
+### Planets: gravity and surface
 
-- **Very far:** One cheap representation: **impostor** (billboard), **low-poly silhouette**, or **HLOD** (UE groups many actors into one proxy). Stream in the **real city level/content** only when the player is within range.
-- **Closer:** Stream in the city (or district), then use normal **LOD** and **HLOD** as they get closer so full detail only loads when they’re near.
+- **Gravity:** Use **local gravity** per planet: direction = toward planet center (or the dominant body). Implement via **gravity volumes** or a **gravity manager** that applies force toward the nearest/dominant planet. World gravity can stay zero in space; gravity volumes or the manager handle surface gravity.
+- **Flat vs curved:** Both are supported. **Flat world** = one global up; placement is simple (position + yaw). **Curved world** (spherical planet) = each building/actor must be oriented with the **local surface normal** (so up = outward from planet at that point). Placement data or logic must then provide position-on-sphere and rotation derived from the surface normal. Prefer flat for simplicity and scaling; use curved when a "standing on a planet" feel is required (e.g. horizon, seamless surface to orbit).
+- **Cities and detail at distance:** Use **impostors**, **low-poly silhouettes**, or **HLOD** for distant cities; stream in full content when the player is within range. LOD as they get closer.
 
-**In short:** Galaxy = one World Partition level (JSON-authored, streamed by cells). Solar system = one streamed level per system. Planet = one streamed level per planet (gravity, cities, surface). Transitions = stream levels at boundaries (system entry, atmosphere entry) and use VFX (e.g. reentry) and **gravity volumes** where you mix gravity in the same level. Cities = distant proxy (impostor/HLOD) until in range, then stream the real city and use LOD as you get closer.
+### Optional MVP path
+
+- **Phase 1:** Small spherical planet (one mesh), local gravity (force toward center), character that walks on it. No level streaming.
+- **Phase 2:** Place a few buildings on the planet with **curvature-aware** placement: position on sphere + rotation from surface normal so buildings stand straight on the ground.
 
 ---
 
@@ -99,7 +104,7 @@ The project provides a **Place Actors From Data** command (Level Editor toolbar 
 - **Properties** – (optional) Object of property names to values, applied to the spawned actor via reflection. Works for **any** actor type. Supported: numbers, bools, strings, and asset path strings (for UObject* properties). Example: `"Properties": { "StarMesh": "/Engine/BasicShapes/Shape_Sphere.Shape_Sphere", "StarCount": 5000 }`.
 - **StarMesh** – (optional) Shorthand for `AGalaxyStarField`; same as putting in Properties.
 - **StarMaterial** – (optional) Shorthand for `AGalaxyStarField`; same as putting in Properties.
-- **Defaults** – (optional) Root-level object. `Defaults.Properties` is applied to every actor first; each actor's Properties override. If present, `Defaults.StarMesh` and `Defaults.StarMaterial` apply to all `AGalaxyStarField` entries that don’t set their own. Lets one JSON define “all star fields use this mesh/material” without repeating per actor.
+- **Defaults** – (optional) Root-level object. `Defaults.Properties` is applied to every actor first; each actor's Properties override. If present, `Defaults.StarMesh` and `Defaults.StarMaterial` apply to all `AGalaxyStarField` entries that don't set their own. Lets one JSON define "all star fields use this mesh/material" without repeating per actor.
 
 **Steps for AI/agents:**
 
@@ -128,6 +133,6 @@ One scalable approach: keep **placement presets** in Config/PlacementData/ (e.g.
 ## Summary for AI
 
 - **Galaxy scale:** Procedural generation + World Partition + LWC. Don't hand-place.
-- **Level streaming:** Galaxy = one World Partition level. Solar system = one streamed level per system. Planet = one streamed level per planet. Stream at boundaries (system entry, atmosphere entry); use gravity volumes for mixed gravity (e.g. hangar vs space). Cities = distant proxy (impostor/HLOD) until in range, then stream and LOD. See [Level streaming and scale architecture](#2-level-streaming-and-scale-architecture) above.
+- **World Partition and scale:** One World Partition level for the whole playable galaxy (~36 named locations). Floating origin for vast distances; warp/jump for fast travel. No level streaming between systems — seamless travel. Author each location at local origin; data holds world positions; runtime or tool places content. See [World Partition and scale architecture](#2-world-partition-and-scale-architecture) above.
 - **Placing actors:** Add or edit JSON in `Config/PlacementData/`, then run **Place Actors From Data** → choose the preset (Level Editor toolbar or **Tools → Federation**). AI edits the JSON files and spawner code; a human (or automation) runs the chosen preset. See format above.
 - **Your role:** Run the editor command after data changes; placement is repeatable and AI-friendly.
