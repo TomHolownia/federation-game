@@ -6,7 +6,7 @@
       "Rotation": [0, 0, 0],
       "Scale": [1, 1, 1],
       "Properties": {
-        "SkeletalMesh": "/Game/AnimStarterPack/UE4_Mannequin/Mesh/SK_Mannequin.SK_Mannequin"
+        "SkeletalMesh": "/Game/Characters/Human/Human.Human"
       }
     }
   ]

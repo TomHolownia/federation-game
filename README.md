@@ -47,12 +47,10 @@ git lfs pull
 See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
 
 ### Running Tests
-```bash
-# From Unreal Editor
-# Window > Developer Tools > Session Frontend > Automation
 
-# Filter by "FederationGame" and run
-```
+In the editor console (~): **`Automation RunTests *`**
+
+Or: Window → Developer Tools → Session Frontend → Automation tab.
 
 ## Project Structure
 
