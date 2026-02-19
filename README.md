@@ -52,6 +52,10 @@ In the editor console (~): **`Automation RunTests *`**
 
 Or: Window → Developer Tools → Session Frontend → Automation tab.
 
+### Player character (first-person mannequin)
+
+The default pawn is **AFederationCharacter** (Animation Starter Pack–style mannequin): first-person with visible hands/arms/body, and an optional third-person view. The game mode is set in `Config/DefaultEngine.ini` (`GlobalDefaultGameMode`). To use a specific mannequin mesh or bind **ToggleViewMode** to a key, create a Blueprint subclass of `FederationCharacter` in Content and assign the mesh or add input bindings there.
+
 ## Project Structure
 
 ```
