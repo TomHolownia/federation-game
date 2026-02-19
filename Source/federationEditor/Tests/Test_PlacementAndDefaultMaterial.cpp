@@ -6,6 +6,13 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "DefaultGalaxyStarMaterial.h"
+#include "PlaceActorsFromDataCommand.h"
+#include "Editor.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "Engine/SkeletalMesh.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/Actor.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -77,6 +84,69 @@ bool FDefaultGalaxyStarMaterialReturnsNonNull::RunTest(const FString& Parameters
 	{
 		TestFalse(TEXT("Material should have a valid name"), Material->GetName().IsEmpty());
 	}
+	return true;
+}
+
+/**
+ * Place Actors From Data with a SkeletalMeshActor preset (Human.json) spawns an actor whose mesh component has a mesh set (no white dot).
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlaceActorsFromDataSkeletalMeshGetsMesh,
+	"FederationEditor.Placement.SkeletalMeshActorGetsMeshSet",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlaceActorsFromDataSkeletalMeshGetsMesh::RunTest(const FString& Parameters)
+{
+	if (!GEditor)
+	{
+		AddError(TEXT("Requires editor context"));
+		return false;
+	}
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (!World)
+	{
+		AddError(TEXT("No editor world (open a level first)"));
+		return false;
+	}
+
+	FPlaceActorsFromDataCommand::Execute(TEXT("Human.json"));
+
+	// Human.json spawns /Script/Engine.SkeletalMeshActor at (0,0,100). Resolve class by path to avoid engine header dependency.
+	UClass* SkeletalMeshActorClass = LoadClass<AActor>(nullptr, TEXT("/Script/Engine.SkeletalMeshActor"));
+	TestNotNull(TEXT("SkeletalMeshActor class must be loadable"), SkeletalMeshActorClass);
+	if (!SkeletalMeshActorClass)
+	{
+		return false;
+	}
+
+	AActor* Found = nullptr;
+	const FVector ExpectedLoc(0.0, 0.0, 100.0);
+	const float Tolerance = 50.0f;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (It->IsA(SkeletalMeshActorClass) && FVector::Dist(It->GetActorLocation(), ExpectedLoc) < Tolerance)
+		{
+			Found = *It;
+			break;
+		}
+	}
+
+	TestNotNull(TEXT("Place Actors From Data Human.json should spawn a SkeletalMeshActor at (0,0,100)"), Found);
+	if (!Found)
+	{
+		return false;
+	}
+
+	USkeletalMeshComponent* SMC = Found->FindComponentByClass<USkeletalMeshComponent>();
+	TestNotNull(TEXT("SkeletalMeshActor must have a SkeletalMeshComponent"), SMC);
+	if (SMC)
+	{
+		USkeletalMesh* Mesh = Cast<USkeletalMesh>(SMC->GetSkinnedAsset());
+		TestNotNull(TEXT("Component must have a mesh set (no white dot)"), Mesh);
+	}
+
+	Found->Destroy();
 	return true;
 }
 
