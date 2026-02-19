@@ -4,10 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "InputActionValue.h"
 #include "FederationCharacter.generated.h"
 
 class UCameraComponent;
 class USpringArmComponent;
+class UInputMappingContext;
+class UInputAction;
 
 /**
  * First-person player character using the Animation Starter Pack mannequin.
@@ -37,6 +40,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	bool bUseThirdPersonView = false;
 
+	/** Optional: assign Input Mapping Context from Content/Input. If null, a default IMC is created at runtime (WASD, mouse look, jump). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputMappingContext> DefaultMappingContext;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> MoveForwardAction;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> MoveRightAction;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> LookAction;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> JumpAction;
+
 	/** Toggle between first-person and third-person view. */
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	void ToggleViewMode();
@@ -47,9 +63,22 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 	/** Apply first-person camera: attach to mesh at eye height, ensure body is visible to owner. */
 	void SetupFirstPersonView();
+
+	/** Mouse look: add yaw/pitch to controller rotation (legacy axis fallback). */
+	void AddLookYaw(float Value);
+	void AddLookPitch(float Value);
+
+	void OnMoveForward(const FInputActionValue& Value);
+	void OnMoveRight(const FInputActionValue& Value);
+	void OnLook(const FInputActionValue& Value);
+
+	/** Binds Enhanced Input: uses assigned assets or creates runtime defaults. */
+	void SetupEnhancedInput();
+	void CreateDefaultInputActionsAndContext();
 
 	/** Apply third-person or first-person camera active state. */
 	void UpdateActiveCamera();
