@@ -113,6 +113,11 @@ namespace
 			{
 				Merged->SetNumberField(TEXT("FloorRadius"), FloorRadiusDefault);
 			}
+			double PlanetRadiusDefault = 0.0;
+			if ((*DefaultsObj)->TryGetNumberField(TEXT("PlanetRadius"), PlanetRadiusDefault) && PlanetRadiusDefault > 0.0)
+			{
+				Merged->SetNumberField(TEXT("PlanetRadius"), PlanetRadiusDefault);
+			}
 		}
 		const TSharedPtr<FJsonObject>* ActorProps = nullptr;
 		if (ActorObj->TryGetObjectField(TEXT("Properties"), ActorProps) && ActorProps->IsValid())
@@ -128,6 +133,11 @@ namespace
 		if (ActorObj->TryGetNumberField(TEXT("FloorRadius"), FloorRadiusActor) && FloorRadiusActor > 0.0)
 		{
 			Merged->SetNumberField(TEXT("FloorRadius"), FloorRadiusActor);
+		}
+		double PlanetRadiusActor = 0.0;
+		if (ActorObj->TryGetNumberField(TEXT("PlanetRadius"), PlanetRadiusActor) && PlanetRadiusActor > 0.0)
+		{
+			Merged->SetNumberField(TEXT("PlanetRadius"), PlanetRadiusActor);
 		}
 		return Merged;
 	}
@@ -340,23 +350,39 @@ void FPlaceActorsFromDataCommand::Execute(const FString& RelativeFileName)
 					ApplyPropertiesFromJson(SMComp, MergedProps);
 				}
 			}
-			// StaticMeshActor: default mesh if null (e.g. Small Planet floor); FloorRadius drives scale (radius = half-extent, scale XY = Radius/50, Z = 0.2)
+			// StaticMeshActor: Small Planet floor (flat) or planet sphere. FloorRadius = flat scale (XY = R/50, Z = 0.2). PlanetRadius = sphere scale (uniform R/50).
 			if (AStaticMeshActor* StaticMeshActor = Cast<AStaticMeshActor>(Spawned))
 			{
 				UStaticMeshComponent* SMComp = StaticMeshActor->GetStaticMeshComponent();
-				if (SMComp && !SMComp->GetStaticMesh())
+				double PlanetRadius = 0.0;
+				if (MergedProps->TryGetNumberField(TEXT("PlanetRadius"), PlanetRadius) && PlanetRadius > 0.0)
 				{
-					UStaticMesh* DefaultCube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
-					if (DefaultCube)
+					// Planet sphere: always load and assign mesh (Properties string path often doesn't resolve)
+					if (SMComp)
 					{
-						SMComp->SetStaticMesh(DefaultCube);
+						UStaticMesh* SphereMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Shape_Sphere.Shape_Sphere"));
+						if (!SphereMesh) { SphereMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")); }
+						if (SphereMesh) { SMComp->SetStaticMesh(SphereMesh); }
 					}
+					const float R = static_cast<float>(PlanetRadius);
+					Spawned->SetActorScale3D(FVector(R / 50.f, R / 50.f, R / 50.f));
+					Spawned->SetActorLocation(FVector::ZeroVector);
+					Spawned->SetActorLabel(TEXT("Planet"));
+					Spawned->Tags.Add(FName(TEXT("Planet")));
 				}
-				double FloorRadius = 0.0;
-				if (MergedProps->TryGetNumberField(TEXT("FloorRadius"), FloorRadius) && FloorRadius > 0.0)
+				else
 				{
-					const float R = static_cast<float>(FloorRadius);
-					Spawned->SetActorScale3D(FVector(R / 50.f, R / 50.f, 0.2f));
+					if (SMComp && !SMComp->GetStaticMesh())
+					{
+						UStaticMesh* DefaultCube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+						if (DefaultCube) { SMComp->SetStaticMesh(DefaultCube); }
+					}
+					double FloorRadius = 0.0;
+					if (MergedProps->TryGetNumberField(TEXT("FloorRadius"), FloorRadius) && FloorRadius > 0.0)
+					{
+						const float R = static_cast<float>(FloorRadius);
+						Spawned->SetActorScale3D(FVector(R / 50.f, R / 50.f, 0.2f));
+					}
 				}
 			}
 			AGalaxyStarField* StarField = Cast<AGalaxyStarField>(Spawned);

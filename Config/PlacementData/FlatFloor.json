@@ -1,0 +1,13 @@
+{
+  "Actors": [
+    {
+      "Class": "/Script/Engine.StaticMeshActor",
+      "Location": [0, 0, -5],
+      "Rotation": [0, 0, 0],
+      "Scale": [50, 50, 0.1],
+      "Properties": {
+        "StaticMesh": "/Engine/BasicShapes/Cube.Cube"
+      }
+    }
+  ]
+}

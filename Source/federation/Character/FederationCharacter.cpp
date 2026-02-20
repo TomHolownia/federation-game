@@ -59,15 +59,14 @@ AFederationCharacter::AFederationCharacter(const FObjectInitializer& ObjectIniti
 	ThirdPersonCameraComponent->SetupAttachment(ThirdPersonSpringArm);
 	ThirdPersonCameraComponent->bUsePawnControlRotation = false;
 
-	// Reduce sliding on slopes (e.g. planet surface)
+	// GroundFriction only applies in Walking mode; FallingLateralFriction (default 0) applies in air.
+	// Do NOT use bUseSeparateBrakingFriction — it overrides falling friction too and kills air velocity.
 	GetCharacterMovement()->GroundFriction = 20.f;
 	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
-	GetCharacterMovement()->bUseSeparateBrakingFriction = true;
-	GetCharacterMovement()->BrakingFriction = 20.f;
-	GetCharacterMovement()->BrakingFrictionFactor = 2.f;
 	// Slightly snappier movement/jump for iteration.
 	GetCharacterMovement()->MaxWalkSpeed = 750.f;
 	GetCharacterMovement()->JumpZVelocity = 520.f;
+	GetCharacterMovement()->AirControl = 0.f;
 	// With custom (radial) gravity, accept any surface as walkable so we stand on the planet
 	GetCharacterMovement()->SetWalkableFloorZ(0.f);
 	GetCharacterMovement()->MaxStepHeight = 55.f;
@@ -91,6 +90,31 @@ void AFederationCharacter::Tick(float DeltaSeconds)
 	UpdatePlanetGravity();
 	UpdateGravityAlignment(DeltaSeconds);
 	UpdateCameraOrientation();
+	RecoverGroundContact();
+}
+
+void AFederationCharacter::RecoverGroundContact()
+{
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+	if (!CMC || CMC->MovementMode != MOVE_Falling) return;
+	if (LastGravityDir.IsNearlyZero()) return;
+
+	// Only recover when falling toward the surface, not while ascending from a jump.
+	const float VelAlongGravity = FVector::DotProduct(CMC->Velocity, LastGravityDir);
+	if (VelAlongGravity < -10.f) return;
+
+	// Trace from the capsule bottom a short distance in the gravity direction.
+	const float CapsuleHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	const FVector CapsuleBottom = GetActorLocation() + LastGravityDir * CapsuleHalfHeight;
+	const float TraceLen = 15.f;
+	const FVector End = CapsuleBottom + LastGravityDir * TraceLen;
+
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(GroundRecover), false, this);
+	if (GetWorld()->LineTraceSingleByChannel(Hit, CapsuleBottom, End, ECC_Visibility, Params) && Hit.bBlockingHit)
+	{
+		CMC->SetMovementMode(MOVE_Walking);
+	}
 }
 
 void AFederationCharacter::UpdateCameraOrientation()

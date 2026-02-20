@@ -149,4 +149,7 @@ protected:
 	void UpdateCameraOrientation();
 	void ApplyGravityRelativeLook(float YawDegrees, float PitchDegrees);
 	void InitializeGravityRelativeView(const FVector& Up);
+
+	/** If in Falling mode but a surface is very close in the gravity direction, recover to Walking. */
+	void RecoverGroundContact();
 };
