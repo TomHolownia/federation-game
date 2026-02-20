@@ -1,0 +1,24 @@
+{
+  "Defaults": {
+    "Properties": {
+      "FloorRadius": 200000
+    }
+  },
+  "Actors": [
+    {
+      "Class": "/Script/Engine.StaticMeshActor",
+      "Location": [0, 0, 0],
+      "Properties": {
+        "FloorRadius": 200000
+      }
+    },
+    {
+      "Class": "/Script/federation.PlanetSurfaceStressTest",
+      "Location": [0, 0, 100],
+      "Properties": {
+        "InstanceCount": 10000,
+        "ScatterRadius": 200000
+      }
+    }
+  ]
+}

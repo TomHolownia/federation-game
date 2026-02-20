@@ -26,16 +26,19 @@ Don't hand-place. Use:
 
 ## 2. World Partition and scale architecture
 
-We use **one World Partition level** for the whole playable galaxy. No level streaming between systems: travel between all named locations is seamless. Scope is on the order of **~36 named locations** (planets/systems on the galaxy map), which is manageable in a single world.
+The galaxy uses a **hybrid architecture**: one main World Partition level (`DeepSpace`) for space-scale content, and **separate streaming levels per planet surface**. Planet surfaces are streamed in on approach and unloaded on departure, keeping the main level lightweight while allowing dense per-planet content.
+
+This replaces the earlier "one WP level for everything" approach. A single WP level cannot scale to content-rich planet surfaces because WP uses a flat XY grid that doesn't map to spheres, and planet-scale content density is too large for a single level.
 
 ### Level structure
 
 | Topic | Approach |
 |-------|----------|
-| **World** | **One level** with **World Partition** enabled. This is the only level for galaxy, solar systems, and planets. Keep other levels only for separate flows (e.g. main menu, cinematics) if needed. |
-| **Streaming** | World Partition streams **cells** by distance from the player. Only cells near the player are loaded; the rest is unloaded. Empty space between locations has no content, so vast distances do not make the level huge in memory. |
+| **Space level** | **`DeepSpace`** with **World Partition** enabled. Contains galaxy-scale content: star fields, skybox, planet sphere visuals, and `UPlanetSurfaceStreamer` components on each planet. |
+| **Planet surfaces** | Each planet has a **separate level** (e.g. `Content/Planets/PlanetSurface_Test.umap`) with its own WP. Loaded dynamically via `ULevelStreamingDynamic` when the player approaches, unloaded when they leave. |
+| **Streaming** | World Partition streams space-level cells by distance. Planet surfaces are streamed as whole sublevels (via `UPlanetSurfaceStreamer`) triggered by proximity to planet spheres. |
 | **Floating origin** | Use a **floating origin**: periodically shift the world so the player stays near (0,0,0) in engine space. This avoids float precision issues across vast distances. Distances in data can be millions of units; the engine sees relative positions. |
-| **Travel** | **Warp / jump** (or very high speed) for crossing vast distances so the player does not spend real time flying through empty space. One coordinate space, one level — no level load when moving between locations. |
+| **Travel** | **Warp / jump** (or very high speed) for crossing vast distances so the player does not spend real time flying through empty space. One coordinate space for space; planet transitions handled by streaming. |
 
 ### Level design workflow (do not place at huge coordinates)
 
@@ -45,16 +48,45 @@ You do **not** move the editor camera millions of units and place actors there. 
 - **Data holds world positions:** A data asset or table stores each location's **world position** in the galaxy (e.g. Earth at (0,0,0), New Mars at (1e9, 2e8, 0)). Coordinates can be vast; they are just numbers in data.
 - **Runtime or tool places content:** At runtime (or in a build/editor step), spawn or position each block at its world coordinates. Floating origin is applied so the engine always operates near the origin. Placement-from-data (e.g. Place Actors From Data) can write world positions from this table; the level itself is authored in local chunks.
 
+### Planet surface streaming
+
+Each planet sphere in the space level has a `UPlanetSurfaceStreamer` component (`Source/federation/Planet/PlanetSurfaceStreamer.h`). It manages the full planet approach lifecycle:
+
+1. **Idle** — Player is in space. The streamer checks distance to the player every tick.
+2. **Loading** — Player enters `StreamingRadius`. The streamer calls `ULevelStreamingDynamic::LoadLevelInstance()` with the planet's surface level path.
+3. **OnSurface** — Level is loaded. The player is teleported to `SurfaceSpawnOffset`, the `UPlanetGravityComponent` is disabled (standard downward gravity on flat terrain), and the `OnSurfaceLoaded` delegate fires.
+4. **Unloading** — Player moves beyond `ExitAltitude` from the surface origin. The player is teleported back to their saved space position, gravity is restored, and the surface level is unloaded.
+
+**To add a new planet surface:**
+
+1. Create a level in `Content/Planets/` (e.g. `PlanetSurface_Mars.umap`).
+2. Enable World Partition on it; add terrain, foliage, structures.
+3. In the space level, add `UPlanetSurfaceStreamer` to the planet sphere actor.
+4. Set `SurfaceLevelPath` to the level's long package name (e.g. `/Game/Planets/PlanetSurface_Mars`).
+
 ### Planets: gravity and surface
 
-- **Gravity:** Use **local gravity** per planet: direction = toward planet center (or the dominant body). Implement via **gravity volumes** or a **gravity manager** that applies force toward the nearest/dominant planet. World gravity can stay zero in space; gravity volumes or the manager handle surface gravity.
-- **Flat vs curved:** Both are supported. **Flat world** = one global up; placement is simple (position + yaw). **Curved world** (spherical planet) = each building/actor must be oriented with the **local surface normal** (so up = outward from planet at that point). Placement data or logic must then provide position-on-sphere and rotation derived from the surface normal. Prefer flat for simplicity and scaling; use curved when a "standing on a planet" feel is required (e.g. horizon, seamless surface to orbit).
+- **In space:** `UPlanetGravityComponent` provides radial gravity toward the nearest planet sphere. The character walks on the sphere surface with full capsule alignment and gravity-relative camera.
+- **On planet surface:** When streamed into a surface level, the gravity component is disabled and standard downward gravity applies. This avoids the radial gravity system fighting with flat terrain. On exit, radial gravity re-engages.
+- **Flat vs curved:** Surface levels use flat terrain (UE5 Landscape with standard gravity). The planet sphere in space provides the "curved world" feel. Future work may support curved terrain in surface levels.
 - **Cities and detail at distance:** Use **impostors**, **low-poly silhouettes**, or **HLOD** for distant cities; stream in full content when the player is within range. LOD as they get closer.
 
-### Optional MVP path
+### Stress testing planet surfaces
 
-- **Phase 1:** Small spherical planet (one mesh), local gravity (force toward center), character that walks on it. No level streaming. For a **flat** playable space (floor + lighting), use the **SmallPlanet** placement preset (Place Actors From Data → SmallPlanet).
-- **Phase 2:** Place a few buildings on the planet with **curvature-aware** placement: position on sphere + rotation from surface normal so buildings stand straight on the ground.
+`APlanetSurfaceStressTest` (`Source/federation/Planet/PlanetSurfaceStressTest.h`) scatters configurable numbers of instanced meshes across a radius. Place it in a surface level to benchmark WP streaming and rendering:
+
+- **InstanceCount** — Number of mesh instances (default 10,000).
+- **ScatterRadius** — Radius to scatter within (default 400,000 UU = 4 km).
+- **Console command:** `Fed.StressTest.SetCount <N>` changes density at runtime.
+
+Test procedure: start at 1K instances, increase to 10K/50K/100K, measure FPS via `stat unit` and `stat scenerendering`. Try different landscape sizes (8×8 km, 16×16 km, 32×32 km) to find WP streaming limits.
+
+### MVP path
+
+- **Phase 1 (done):** Small spherical planet (one mesh), local gravity (force toward center), character that walks on it. SmallPlanet placement preset.
+- **Phase 2 (done):** Mannequin character with first-person view, walking and collision on the planet sphere.
+- **Phase 3 (current — FED-046):** Planet surface streaming MVP. Separate surface level streamed on approach. Stress test actor for performance benchmarking. Tests the hybrid space/surface architecture.
+- **Phase 4 (next):** Add Landscape terrain to the surface level, stress-test with foliage and structures. Evaluate whether origin rebasing (FED-033) is needed at surface scale.
 
 ---
 
@@ -80,7 +112,7 @@ The whole galaxy is defined in data. An Editor Utility reads it and spawns actor
 
 The project provides a **Place Actors From Data** command (Level Editor toolbar and **Tools → Federation** menu). It lists all `*.json` files in **Config/PlacementData/**; choose a preset (e.g. **GalaxyMapTest**, **MilkyWaySkybox**) to spawn those actors in the current level. This is the canonical way for an AI agent to "place" actors: add or edit a JSON in that directory, then run the matching preset.
 
-**Presets included:** `GalaxyMapTest.json` (directional light + galaxy star fields), `MilkyWaySkybox.json` (sky sphere for space background), `SmallPlanet.json` (flat floor + basic lighting for a small planet playable space; see Config/PlacementData/README.txt). Add more JSON files for custom placement (e.g. specific objects, levels, or procedural setups).
+**Presets included:** `GalaxyMapTest.json` (directional light + galaxy star fields), `MilkyWaySkybox.json` (sky sphere for space background), `SmallPlanet.json` (flat floor + basic lighting for a small planet playable space; see Config/PlacementData/README.txt), `PlanetSurfaceTest.json` (flat ground + stress test actor for surface streaming benchmark). Add more JSON files for custom placement (e.g. specific objects, levels, or procedural setups).
 
 **Placement JSON format** (each file in Config/PlacementData/):
 
@@ -133,6 +165,8 @@ One scalable approach: keep **placement presets** in Config/PlacementData/ (e.g.
 ## Summary for AI
 
 - **Galaxy scale:** Procedural generation + World Partition + LWC. Don't hand-place.
-- **World Partition and scale:** One World Partition level for the whole playable galaxy (~36 named locations). Floating origin for vast distances; warp/jump for fast travel. No level streaming between systems — seamless travel. Author each location at local origin; data holds world positions; runtime or tool places content. See [World Partition and scale architecture](#2-world-partition-and-scale-architecture) above.
+- **Hybrid architecture:** Main WP level (`DeepSpace`) for space. Separate streaming levels per planet surface, loaded/unloaded via `UPlanetSurfaceStreamer`. This replaced the earlier "one WP for everything" approach.
+- **Planet surfaces:** Each planet sphere has a `UPlanetSurfaceStreamer` component. Set `SurfaceLevelPath` to the surface level's package name. Gravity switches from radial (space) to standard downward (surface) on transition.
 - **Placing actors:** Add or edit JSON in `Config/PlacementData/`, then run **Place Actors From Data** → choose the preset (Level Editor toolbar or **Tools → Federation**). AI edits the JSON files and spawner code; a human (or automation) runs the chosen preset. See format above.
+- **Stress testing:** `APlanetSurfaceStressTest` scatters instanced meshes for benchmarking. Console: `Fed.StressTest.SetCount <N>`.
 - **Your role:** Run the editor command after data changes; placement is repeatable and AI-friendly.
