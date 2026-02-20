@@ -135,7 +135,7 @@ protected:
 
 	/** How quickly to align capsule to gravity (higher = snappier). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character|Tuning")
-	float GravityAlignInterpSpeed = 10.f;
+	float GravityAlignInterpSpeed = 25.f;
 
 	void UpdateGravityAlignment(float DeltaSeconds);
 

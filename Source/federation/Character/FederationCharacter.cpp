@@ -50,8 +50,9 @@ AFederationCharacter::AFederationCharacter(const FObjectInitializer& ObjectIniti
 	ThirdPersonSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("ThirdPersonSpringArm"));
 	ThirdPersonSpringArm->SetupAttachment(GetCapsuleComponent());
 	ThirdPersonSpringArm->TargetArmLength = ThirdPersonArmLength;
-	ThirdPersonSpringArm->bUsePawnControlRotation = true;
+	ThirdPersonSpringArm->bUsePawnControlRotation = false;
 	ThirdPersonSpringArm->bInheritRoll = false;
+	ThirdPersonSpringArm->SetUsingAbsoluteRotation(true);
 	ThirdPersonSpringArm->SetRelativeLocation(ThirdPersonSpringArmOffset);
 
 	ThirdPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("ThirdPersonCamera"));
@@ -69,6 +70,9 @@ AFederationCharacter::AFederationCharacter(const FObjectInitializer& ObjectIniti
 	GetCharacterMovement()->JumpZVelocity = 520.f;
 	// With custom (radial) gravity, accept any surface as walkable so we stand on the planet
 	GetCharacterMovement()->SetWalkableFloorZ(0.f);
+	GetCharacterMovement()->MaxStepHeight = 55.f;
+	GetCharacterMovement()->PerchRadiusThreshold = 30.f;
+	GetCharacterMovement()->PerchAdditionalHeight = 50.f;
 }
 
 void AFederationCharacter::BeginPlay()
@@ -97,10 +101,18 @@ void AFederationCharacter::UpdateCameraOrientation()
 	if (!bGravityActive)
 	{
 		FirstPersonCameraComponent->bUsePawnControlRotation = true;
+		if (ThirdPersonSpringArm)
+		{
+			ThirdPersonSpringArm->bUsePawnControlRotation = true;
+		}
 		return;
 	}
 
 	FirstPersonCameraComponent->bUsePawnControlRotation = false;
+	if (ThirdPersonSpringArm)
+	{
+		ThirdPersonSpringArm->bUsePawnControlRotation = false;
+	}
 
 	const FVector Up = (-LastGravityDir).GetSafeNormal();
 
@@ -115,6 +127,10 @@ void AFederationCharacter::UpdateCameraOrientation()
 
 	const FQuat ViewQuat = FRotationMatrix::MakeFromXZ(Forward, Up).ToQuat();
 	FirstPersonCameraRoot->SetWorldRotation(ViewQuat);
+	if (ThirdPersonSpringArm)
+	{
+		ThirdPersonSpringArm->SetWorldRotation(ViewQuat);
+	}
 }
 
 void AFederationCharacter::InitializeGravityRelativeView(const FVector& Up)
@@ -216,8 +232,18 @@ void AFederationCharacter::UpdateGravityAlignment(float DeltaSeconds)
 	}
 
 	const FQuat TargetQuat = FRotationMatrix::MakeFromXZ(DesiredForward, DesiredUp).ToQuat();
-	const FQuat NewQuat = FMath::QInterpTo(GetActorQuat(), TargetQuat, DeltaSeconds, GravityAlignInterpSpeed);
-	SetActorRotation(NewQuat);
+	const float AngleDiff = GetActorQuat().AngularDistance(TargetQuat);
+	// Snap when nearly aligned to avoid float-precision jitter that keeps the capsule
+	// slightly misaligned and intermittently lifts it off the floor.
+	if (AngleDiff < FMath::DegreesToRadians(0.5f))
+	{
+		SetActorRotation(TargetQuat);
+	}
+	else
+	{
+		const FQuat NewQuat = FMath::QInterpTo(GetActorQuat(), TargetQuat, DeltaSeconds, GravityAlignInterpSpeed);
+		SetActorRotation(NewQuat);
+	}
 }
 
 void AFederationCharacter::UpdatePlanetGravity()
