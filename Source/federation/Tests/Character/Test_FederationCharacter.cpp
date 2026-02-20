@@ -2,10 +2,12 @@
 
 #include "Misc/AutomationTest.h"
 #include "Character/FederationCharacter.h"
+#include "Planet/PlanetGravityComponent.h"
 #include "Engine/World.h"
 #include "Tests/AutomationCommon.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -131,6 +133,94 @@ bool FFederationCharacterToggleViewMode::RunTest(const FString& Parameters)
 
 	Character->ToggleViewMode();
 	TestFalse(TEXT("After second toggle back to first-person"), Character->bUseThirdPersonView);
+
+	Character->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Component and character-specific tests
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterHasPlanetGravityComponent,
+	"FederationGame.Character.FederationCharacter.HasPlanetGravityComponent",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterHasPlanetGravityComponent::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	TestNotNull(TEXT("Character should have a PlanetGravityComponent"),
+		Character->GravityComp.Get());
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterAirControlIsZero,
+	"FederationGame.Character.FederationCharacter.AirControlIsZero",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterAirControlIsZero::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	TestEqual(TEXT("AirControl should be zero for no in-air steering"),
+		Character->GetCharacterMovement()->AirControl, 0.f);
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterFirstPersonCameraRootAbsoluteRotation,
+	"FederationGame.Character.FederationCharacter.FirstPersonCameraRootAbsoluteRotation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterFirstPersonCameraRootAbsoluteRotation::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	TestTrue(TEXT("FirstPersonCameraRoot should use absolute rotation"),
+		Character->FirstPersonCameraRoot->IsUsingAbsoluteRotation());
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterSpringArmAbsoluteRotation,
+	"FederationGame.Character.FederationCharacter.SpringArmAbsoluteRotation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterSpringArmAbsoluteRotation::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	TestTrue(TEXT("ThirdPersonSpringArm should use absolute rotation"),
+		Character->ThirdPersonSpringArm->IsUsingAbsoluteRotation());
 
 	Character->Destroy();
 	return true;

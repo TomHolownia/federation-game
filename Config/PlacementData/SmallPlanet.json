@@ -1,6 +1,6 @@
 {
   "Defaults": {
-    "PlanetRadius": 25000
+    "PlanetRadius": 100000
   },
   "Actors": [
     {

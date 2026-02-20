@@ -1,6 +1,7 @@
 // Copyright Federation Game. All Rights Reserved.
 
 #include "Character/FederationCharacter.h"
+#include "Planet/PlanetGravityComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -15,9 +16,6 @@
 #include "InputAction.h"
 #include "InputModifiers.h"
 #include "GameFramework/PlayerController.h"
-#include "Kismet/GameplayStatics.h"
-#include "Engine/StaticMeshActor.h"
-#include "EngineUtils.h"
 
 AFederationCharacter::AFederationCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -59,6 +57,9 @@ AFederationCharacter::AFederationCharacter(const FObjectInitializer& ObjectIniti
 	ThirdPersonCameraComponent->SetupAttachment(ThirdPersonSpringArm);
 	ThirdPersonCameraComponent->bUsePawnControlRotation = false;
 
+	// Gravity component owns planet detection, capsule alignment, camera orientation, and ground recovery.
+	GravityComp = CreateDefaultSubobject<UPlanetGravityComponent>(TEXT("PlanetGravity"));
+
 	// GroundFriction only applies in Walking mode; FallingLateralFriction (default 0) applies in air.
 	// Do NOT use bUseSeparateBrakingFriction — it overrides falling friction too and kills air velocity.
 	GetCharacterMovement()->GroundFriction = 20.f;
@@ -82,267 +83,18 @@ void AFederationCharacter::BeginPlay()
 	SetupFirstPersonView();
 	UpdateActiveCamera();
 	SetupEnhancedInput();
+
+	if (GravityComp)
+	{
+		GravityComp->SetCameraReferences(FirstPersonCameraRoot, ThirdPersonSpringArm);
+	}
 }
 
 void AFederationCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	UpdatePlanetGravity();
-	UpdateGravityAlignment(DeltaSeconds);
-	UpdateCameraOrientation();
-	RecoverGroundContact();
 }
 
-void AFederationCharacter::RecoverGroundContact()
-{
-	UCharacterMovementComponent* CMC = GetCharacterMovement();
-	if (!CMC || CMC->MovementMode != MOVE_Falling) return;
-	if (LastGravityDir.IsNearlyZero()) return;
-
-	// Only recover when falling toward the surface, not while ascending from a jump.
-	const float VelAlongGravity = FVector::DotProduct(CMC->Velocity, LastGravityDir);
-	if (VelAlongGravity < -10.f) return;
-
-	// Trace from the capsule bottom a short distance in the gravity direction.
-	const float CapsuleHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	const FVector CapsuleBottom = GetActorLocation() + LastGravityDir * CapsuleHalfHeight;
-	const float TraceLen = 15.f;
-	const FVector End = CapsuleBottom + LastGravityDir * TraceLen;
-
-	FHitResult Hit;
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(GroundRecover), false, this);
-	if (GetWorld()->LineTraceSingleByChannel(Hit, CapsuleBottom, End, ECC_Visibility, Params) && Hit.bBlockingHit)
-	{
-		CMC->SetMovementMode(MOVE_Walking);
-	}
-}
-
-void AFederationCharacter::UpdateCameraOrientation()
-{
-	if (!FirstPersonCameraRoot || !FirstPersonCameraComponent) return;
-
-	const bool bGravityActive = bUseGravityRelativeLook && bAlignCapsuleToGravity && !LastGravityDir.IsNearlyZero();
-	if (!bGravityActive)
-	{
-		FirstPersonCameraComponent->bUsePawnControlRotation = true;
-		if (ThirdPersonSpringArm)
-		{
-			ThirdPersonSpringArm->bUsePawnControlRotation = true;
-		}
-		return;
-	}
-
-	FirstPersonCameraComponent->bUsePawnControlRotation = false;
-	if (ThirdPersonSpringArm)
-	{
-		ThirdPersonSpringArm->bUsePawnControlRotation = false;
-	}
-
-	const FVector Up = (-LastGravityDir).GetSafeNormal();
-
-	if (!bGravityViewInitialized || FVector::DotProduct(LastViewUp.GetSafeNormal(), Up) < 0.999f)
-	{
-		InitializeGravityRelativeView(Up);
-	}
-
-	const float CosP = FMath::Cos(GravityViewPitchRad);
-	const float SinP = FMath::Sin(GravityViewPitchRad);
-	const FVector Forward = (LastViewTangentForward * CosP + Up * SinP).GetSafeNormal();
-
-	const FQuat ViewQuat = FRotationMatrix::MakeFromXZ(Forward, Up).ToQuat();
-	FirstPersonCameraRoot->SetWorldRotation(ViewQuat);
-	if (ThirdPersonSpringArm)
-	{
-		ThirdPersonSpringArm->SetWorldRotation(ViewQuat);
-	}
-}
-
-void AFederationCharacter::InitializeGravityRelativeView(const FVector& Up)
-{
-	const FVector U = Up.GetSafeNormal();
-	if (U.IsNearlyZero()) return;
-
-	// Reconstruct current forward from existing state, or fall back to actor forward.
-	FVector Forward;
-	if (bGravityViewInitialized)
-	{
-		const float CP = FMath::Cos(GravityViewPitchRad);
-		const float SP = FMath::Sin(GravityViewPitchRad);
-		Forward = (LastViewTangentForward * CP + LastViewUp * SP).GetSafeNormal();
-	}
-	else
-	{
-		Forward = GetActorForwardVector();
-	}
-
-	// Decompose forward into new up-axis reference frame.
-	const float UpComp = FMath::Clamp(FVector::DotProduct(Forward, U), -1.f, 1.f);
-	GravityViewPitchRad = FMath::Asin(UpComp);
-
-	FVector Tangent = (Forward - UpComp * U);
-	if (!Tangent.Normalize())
-	{
-		Tangent = (GetActorForwardVector() - (GetActorForwardVector() | U) * U);
-		if (!Tangent.Normalize())
-		{
-			Tangent = (LastViewTangentForward - (LastViewTangentForward | U) * U);
-			Tangent.Normalize();
-		}
-	}
-	if (!Tangent.IsNearlyZero())
-	{
-		LastViewTangentForward = Tangent;
-	}
-
-	LastViewUp = U;
-	bGravityViewInitialized = true;
-}
-
-void AFederationCharacter::ApplyGravityRelativeLook(float YawDegrees, float PitchDegrees)
-{
-	const FVector Up = (-LastGravityDir).GetSafeNormal();
-	if (Up.IsNearlyZero()) return;
-
-	if (!bGravityViewInitialized || FVector::DotProduct(LastViewUp.GetSafeNormal(), Up) < 0.999f)
-	{
-		InitializeGravityRelativeView(Up);
-	}
-
-	// Yaw: rotate tangent-forward about gravity-up.
-	if (!FMath::IsNearlyZero(YawDegrees))
-	{
-		const float YawRad = FMath::DegreesToRadians(YawDegrees);
-		LastViewTangentForward = FQuat(Up, YawRad).RotateVector(LastViewTangentForward);
-		LastViewTangentForward = (LastViewTangentForward - (LastViewTangentForward | Up) * Up);
-		LastViewTangentForward.Normalize();
-	}
-
-	// Pitch: accumulate as a scalar angle (no Euler decomposition).
-	if (!FMath::IsNearlyZero(PitchDegrees))
-	{
-		const float PitchRad = FMath::DegreesToRadians(PitchDegrees);
-		const float MaxPitchRad = FMath::DegreesToRadians(MaxGravityLookPitchDegrees);
-		GravityViewPitchRad = FMath::Clamp(GravityViewPitchRad + PitchRad, -MaxPitchRad, MaxPitchRad);
-	}
-
-	LastViewUp = Up;
-}
-
-void AFederationCharacter::UpdateGravityAlignment(float DeltaSeconds)
-{
-	if (!bAlignCapsuleToGravity) return;
-	if (LastGravityDir.IsNearlyZero()) return;
-
-	const FVector DesiredUp = (-LastGravityDir).GetSafeNormal();
-
-	// Capsule body follows the view's tangent-forward (ignores pitch) so the character
-	// faces the direction we're looking along the surface.
-	FVector DesiredForward = GetActorForwardVector();
-	if (bUseGravityRelativeLook && bGravityViewInitialized)
-	{
-		const FVector TangentForward = (LastViewTangentForward - (LastViewTangentForward | DesiredUp) * DesiredUp).GetSafeNormal();
-		if (!TangentForward.IsNearlyZero())
-		{
-			DesiredForward = TangentForward;
-		}
-	}
-	else
-	{
-		DesiredForward = (DesiredForward - (DesiredForward | DesiredUp) * DesiredUp).GetSafeNormal();
-		if (DesiredForward.IsNearlyZero())
-		{
-			DesiredForward = FVector::CrossProduct(DesiredUp, GetActorRightVector()).GetSafeNormal();
-		}
-	}
-
-	const FQuat TargetQuat = FRotationMatrix::MakeFromXZ(DesiredForward, DesiredUp).ToQuat();
-	const float AngleDiff = GetActorQuat().AngularDistance(TargetQuat);
-	// Snap when nearly aligned to avoid float-precision jitter that keeps the capsule
-	// slightly misaligned and intermittently lifts it off the floor.
-	if (AngleDiff < FMath::DegreesToRadians(0.5f))
-	{
-		SetActorRotation(TargetQuat);
-	}
-	else
-	{
-		const FQuat NewQuat = FMath::QInterpTo(GetActorQuat(), TargetQuat, DeltaSeconds, GravityAlignInterpSpeed);
-		SetActorRotation(NewQuat);
-	}
-}
-
-void AFederationCharacter::UpdatePlanetGravity()
-{
-	UWorld* World = GetWorld();
-	if (!World || !GetCharacterMovement()) return;
-
-	TArray<AActor*> Planets;
-	UGameplayStatics::GetAllActorsWithTag(World, FName(TEXT("Planet")), Planets);
-	// Fallback: if no tag, use largest planet-like StaticMeshActor (roughly uniform scale = sphere, not a flat floor)
-	if (Planets.Num() == 0)
-	{
-		AActor* Largest = nullptr;
-		float MaxScaleSq = 0.f;
-		for (TActorIterator<AActor> It(World); It; ++It)
-		{
-			AStaticMeshActor* SMA = Cast<AStaticMeshActor>(*It);
-			if (!SMA || *It == this) continue;
-			FVector S = SMA->GetActorScale3D();
-			float ScaleSq = S.X * S.X + S.Y * S.Y + S.Z * S.Z;
-			if (ScaleSq < 100.f) continue;
-			// Require roughly uniform scale (sphere-like); reject flat floors (e.g. 50,50,0.1)
-			float MaxS = FMath::Max3(S.X, S.Y, S.Z);
-			float MinS = FMath::Min3(S.X, S.Y, S.Z);
-			if (MaxS > 0.f && (MinS / MaxS) < 0.2f) continue;
-			if (ScaleSq > MaxScaleSq)
-			{
-				MaxScaleSq = ScaleSq;
-				Largest = *It;
-			}
-		}
-		if (Largest) Planets.Add(Largest);
-	}
-	if (Planets.Num() == 0)
-	{
-		GetCharacterMovement()->SetGravityDirection(FVector::DownVector);
-		LastGravityDir = FVector::DownVector;
-		return;
-	}
-
-	// Use closest planet as gravity source
-	FVector MyLoc = GetActorLocation();
-	AActor* Best = nullptr;
-	float BestDistSq = FLT_MAX;
-	for (AActor* P : Planets)
-	{
-		if (!P) continue;
-		float DistSq = FVector::DistSquared(MyLoc, P->GetActorLocation());
-		if (DistSq < BestDistSq)
-		{
-			BestDistSq = DistSq;
-			Best = P;
-		}
-	}
-	if (!Best)
-	{
-		GetCharacterMovement()->SetGravityDirection(FVector::DownVector);
-		LastGravityDir = FVector::DownVector;
-		return;
-	}
-
-	FVector ToPlanet = Best->GetActorLocation() - MyLoc;
-	float Len = ToPlanet.Size();
-	if (Len < 1.f)
-	{
-		GetCharacterMovement()->SetGravityDirection(FVector::DownVector);
-		LastGravityDir = FVector::DownVector;
-		return; // Inside or on center
-	}
-
-	// Gravity pulls toward planet center
-	FVector GravityDir = ToPlanet / Len;
-	GetCharacterMovement()->SetGravityDirection(GravityDir);
-	LastGravityDir = GravityDir;
-}
 
 void AFederationCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
@@ -391,23 +143,26 @@ void AFederationCharacter::OnMoveForward(const FInputActionValue& Value)
 {
 	const float Forward = Value.Get<float>();
 	if (!Controller) return;
+
 	FVector Dir;
-	if (bUseGravityRelativeLook && bGravityViewInitialized && !LastGravityDir.IsNearlyZero())
+	const FVector GravDir = GravityComp ? GravityComp->GetGravityDirection() : FVector::ZeroVector;
+	if (GravityComp && GravityComp->bUseGravityRelativeLook && GravityComp->IsGravityViewInitialized() && !GravDir.IsNearlyZero())
 	{
-		Dir = (LastViewTangentForward - (LastViewTangentForward | LastGravityDir) * LastGravityDir).GetSafeNormal();
+		const FVector TangentFwd = GravityComp->GetViewTangentForward();
+		Dir = (TangentFwd - (TangentFwd | GravDir) * GravDir).GetSafeNormal();
 		if (Dir.IsNearlyZero())
 		{
-			Dir = (GetActorForwardVector() - (GetActorForwardVector() | LastGravityDir) * LastGravityDir).GetSafeNormal();
+			Dir = (GetActorForwardVector() - (GetActorForwardVector() | GravDir) * GravDir).GetSafeNormal();
 		}
 	}
-	else if (LastGravityDir.IsNearlyZero())
+	else if (GravDir.IsNearlyZero())
 	{
 		const FRotator YawRotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
 		Dir = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 	}
 	else
 	{
-		Dir = (GetActorForwardVector() - (GetActorForwardVector() | LastGravityDir) * LastGravityDir).GetSafeNormal();
+		Dir = (GetActorForwardVector() - (GetActorForwardVector() | GravDir) * GravDir).GetSafeNormal();
 	}
 	if (!Dir.IsNearlyZero()) AddMovementInput(Dir, Forward);
 }
@@ -416,24 +171,26 @@ void AFederationCharacter::OnMoveRight(const FInputActionValue& Value)
 {
 	const float Right = Value.Get<float>();
 	if (!Controller) return;
+
 	FVector Dir;
-	if (bUseGravityRelativeLook && bGravityViewInitialized && !LastGravityDir.IsNearlyZero())
+	const FVector GravDir = GravityComp ? GravityComp->GetGravityDirection() : FVector::ZeroVector;
+	if (GravityComp && GravityComp->bUseGravityRelativeLook && GravityComp->IsGravityViewInitialized() && !GravDir.IsNearlyZero())
 	{
-		const FVector GravityUp = (-LastGravityDir).GetSafeNormal();
-		Dir = FVector::CrossProduct(GravityUp, LastViewTangentForward).GetSafeNormal();
+		const FVector GravUp = GravityComp->GetGravityUp();
+		Dir = FVector::CrossProduct(GravUp, GravityComp->GetViewTangentForward()).GetSafeNormal();
 		if (Dir.IsNearlyZero())
 		{
-			Dir = (GetActorRightVector() - (GetActorRightVector() | LastGravityDir) * LastGravityDir).GetSafeNormal();
+			Dir = (GetActorRightVector() - (GetActorRightVector() | GravDir) * GravDir).GetSafeNormal();
 		}
 	}
-	else if (LastGravityDir.IsNearlyZero())
+	else if (GravDir.IsNearlyZero())
 	{
 		const FRotator YawRotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
 		Dir = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 	}
 	else
 	{
-		Dir = (GetActorRightVector() - (GetActorRightVector() | LastGravityDir) * LastGravityDir).GetSafeNormal();
+		Dir = (GetActorRightVector() - (GetActorRightVector() | GravDir) * GravDir).GetSafeNormal();
 	}
 	if (!Dir.IsNearlyZero()) AddMovementInput(Dir, Right);
 }
@@ -442,9 +199,9 @@ void AFederationCharacter::OnLook(const FInputActionValue& Value)
 {
 	FVector2D Look = Value.Get<FVector2D>();
 	if (!Controller) return;
-	if (bUseGravityRelativeLook && bAlignCapsuleToGravity && !LastGravityDir.IsNearlyZero())
+	if (GravityComp && GravityComp->bUseGravityRelativeLook && GravityComp->bAlignToGravity && !GravityComp->GetGravityDirection().IsNearlyZero())
 	{
-		ApplyGravityRelativeLook(Look.X, Look.Y);
+		GravityComp->ApplyLookInput(Look.X, Look.Y);
 		return;
 	}
 	AddControllerYawInput(Look.X);
@@ -455,9 +212,9 @@ void AFederationCharacter::OnLookYaw(const FInputActionValue& Value)
 {
 	const float Amount = Value.Get<float>();
 	if (!Controller) return;
-	if (bUseGravityRelativeLook && bAlignCapsuleToGravity && !LastGravityDir.IsNearlyZero())
+	if (GravityComp && GravityComp->bUseGravityRelativeLook && GravityComp->bAlignToGravity && !GravityComp->GetGravityDirection().IsNearlyZero())
 	{
-		ApplyGravityRelativeLook(Amount, 0.f);
+		GravityComp->ApplyLookInput(Amount, 0.f);
 		return;
 	}
 	AddControllerYawInput(Amount);
@@ -467,9 +224,9 @@ void AFederationCharacter::OnLookPitch(const FInputActionValue& Value)
 {
 	const float Amount = Value.Get<float>();
 	if (!Controller) return;
-	if (bUseGravityRelativeLook && bAlignCapsuleToGravity && !LastGravityDir.IsNearlyZero())
+	if (GravityComp && GravityComp->bUseGravityRelativeLook && GravityComp->bAlignToGravity && !GravityComp->GetGravityDirection().IsNearlyZero())
 	{
-		ApplyGravityRelativeLook(0.f, Amount);
+		GravityComp->ApplyLookInput(0.f, Amount);
 		return;
 	}
 	AddControllerPitchInput(Amount);

@@ -12,6 +12,7 @@ class USpringArmComponent;
 class USceneComponent;
 class UInputMappingContext;
 class UInputAction;
+class UPlanetGravityComponent;
 
 /**
  * First-person player character using the Animation Starter Pack mannequin.
@@ -91,18 +92,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	void SetThirdPersonView(bool bThirdPerson);
 
+	/** Planet gravity component -- owns all radial-gravity, alignment, camera, and ground-recovery logic. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gravity")
+	TObjectPtr<UPlanetGravityComponent> GravityComp;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
-	/** Update gravity to point toward nearest actor tagged "Planet" (radial planet gravity). */
-	void UpdatePlanetGravity();
-
-	/** Apply first-person camera: attach to mesh at eye height, ensure body is visible to owner. */
 	void SetupFirstPersonView();
 
-	/** Mouse look: add yaw/pitch to controller rotation (legacy axis fallback). */
 	void AddLookYaw(float Value);
 	void AddLookPitch(float Value);
 
@@ -112,44 +112,10 @@ protected:
 	void OnLookYaw(const FInputActionValue& Value);
 	void OnLookPitch(const FInputActionValue& Value);
 
-	/** Binds Enhanced Input: uses assigned assets or creates runtime defaults. */
 	void SetupEnhancedInput();
 	void CreateDefaultInputActionsAndContext();
 
-	/** Apply third-person or first-person camera active state. */
 	void UpdateActiveCamera();
 
-	/** Try to load mannequin skeletal mesh from project (Animation Starter Pack or similar). */
 	void TryLoadDefaultMesh();
-
-	/** Cached gravity direction (toward planet) for surface-relative movement. */
-	FVector LastGravityDir;
-	FVector LastViewUp = FVector::UpVector;
-	FVector LastViewTangentForward = FVector::ForwardVector;
-	bool bGravityViewInitialized = false;
-	float GravityViewPitchRad = 0.f;
-
-	/** When true, rotate the capsule so actor up matches -gravity (lets CharacterMovement treat the sphere as "floor"). */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character|Tuning")
-	bool bAlignCapsuleToGravity = true;
-
-	/** How quickly to align capsule to gravity (higher = snappier). */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character|Tuning")
-	float GravityAlignInterpSpeed = 25.f;
-
-	void UpdateGravityAlignment(float DeltaSeconds);
-
-	/** When true, interpret look input relative to gravity (yaw about gravity-up, pitch about gravity-right). */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Tuning")
-	bool bUseGravityRelativeLook = true;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Tuning")
-	float MaxGravityLookPitchDegrees = 85.f;
-
-	void UpdateCameraOrientation();
-	void ApplyGravityRelativeLook(float YawDegrees, float PitchDegrees);
-	void InitializeGravityRelativeView(const FVector& Up);
-
-	/** If in Falling mode but a surface is very close in the gravity direction, recover to Walking. */
-	void RecoverGroundContact();
 };
