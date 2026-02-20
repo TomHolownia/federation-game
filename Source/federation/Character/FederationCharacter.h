@@ -13,6 +13,7 @@ class USceneComponent;
 class UInputMappingContext;
 class UInputAction;
 class UPlanetGravityComponent;
+class UInventoryComponent;
 
 /**
  * First-person player character using the Animation Starter Pack mannequin.
@@ -95,6 +96,10 @@ public:
 	/** Planet gravity component -- owns all radial-gravity, alignment, camera, and ground-recovery logic. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gravity")
 	TObjectPtr<UPlanetGravityComponent> GravityComp;
+
+	/** Inventory component -- manages carried items, equipment, and weight. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
+	TObjectPtr<UInventoryComponent> InventoryComp;
 
 protected:
 	virtual void BeginPlay() override;
