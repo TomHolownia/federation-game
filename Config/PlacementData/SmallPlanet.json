@@ -1,0 +1,16 @@
+{
+  "Defaults": {
+    "PlanetRadius": 100000
+  },
+  "Actors": [
+    {
+      "Class": "/Script/Engine.StaticMeshActor",
+      "Location": [0, 0, 0],
+      "Rotation": [0, 0, 0],
+      "Scale": [1, 1, 1],
+      "Properties": {
+        "StaticMesh": "/Engine/BasicShapes/Shape_Sphere.Shape_Sphere"
+      }
+    }
+  ]
+}

@@ -14,6 +14,8 @@ Explore a living galaxy, build your fleet, and engage in epic battles across the
 
 🚧 **Early Development** - Setting up core infrastructure
 
+**Play:** Default Game Mode spawns **AFederationCharacter** (FED-039 + FED-030): first-person mannequin with visible body, WASD + mouse look + jump (Enhanced Input). Collision: **Pawn** (capsule), **WorldStatic** (terrain/props), **Vehicle** (reserved for ships).
+
 ## Getting Started
 
 - **First-time setup:** Full step-by-step (Git, Visual Studio, Unreal Engine, clone, open project) is in **[INSTALLATION.md](INSTALLATION.md)**.
@@ -51,6 +53,10 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
 In the editor console (~): **`Automation RunTests *`**
 
 Or: Window → Developer Tools → Session Frontend → Automation tab.
+
+### Player character (first-person mannequin)
+
+The default pawn is **AFederationCharacter** (Animation Starter Pack–style mannequin): first-person with visible hands/arms/body, and an optional third-person view. The game mode is set in `Config/DefaultEngine.ini` (`GlobalDefaultGameMode`). To use a specific mannequin mesh or bind **ToggleViewMode** to a key, create a Blueprint subclass of `FederationCharacter` in Content and assign the mesh or add input bindings there.
 
 ## Project Structure
 

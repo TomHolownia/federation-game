@@ -13,3 +13,8 @@ SkeletalMeshActor (Human.json, Mannequin.json):
   Set "Properties.SkeletalMesh" to the asset path. If the path is wrong (e.g. pack installed
   elsewhere), the code tries fallback paths and an Asset Registry search for "Mannequin"/"Manny".
   To fix manually: Content Browser -> right-click the mesh -> Copy Reference, paste into the JSON.
+
+SmallPlanet.json (FED-029):
+  Planet sphere only (no lights). Set "Defaults.PlanetRadius" (world units; default 5000).
+  The actor is labeled "Planet" and centered at (0,0,0). Place Player Start at (0, 0, PlanetRadius + 50) to land on the "north pole."
+  For a flat floor instead, use an actor with "FloorRadius" (Cube mesh, scale XY = R/50, Z = 0.2).

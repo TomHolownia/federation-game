@@ -8,7 +8,9 @@
 #include "Editor.h"
 #include "Engine/World.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
 #include "Engine/SkeletalMesh.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/FileHelper.h"
@@ -106,6 +108,16 @@ namespace
 				if ((*DefaultsObj)->TryGetStringField(TEXT("StarMesh"), S)) Merged->SetStringField(TEXT("StarMesh"), S);
 				if ((*DefaultsObj)->TryGetStringField(TEXT("StarMaterial"), S)) Merged->SetStringField(TEXT("StarMaterial"), S);
 			}
+			double FloorRadiusDefault = 0.0;
+			if ((*DefaultsObj)->TryGetNumberField(TEXT("FloorRadius"), FloorRadiusDefault) && FloorRadiusDefault > 0.0)
+			{
+				Merged->SetNumberField(TEXT("FloorRadius"), FloorRadiusDefault);
+			}
+			double PlanetRadiusDefault = 0.0;
+			if ((*DefaultsObj)->TryGetNumberField(TEXT("PlanetRadius"), PlanetRadiusDefault) && PlanetRadiusDefault > 0.0)
+			{
+				Merged->SetNumberField(TEXT("PlanetRadius"), PlanetRadiusDefault);
+			}
 		}
 		const TSharedPtr<FJsonObject>* ActorProps = nullptr;
 		if (ActorObj->TryGetObjectField(TEXT("Properties"), ActorProps) && ActorProps->IsValid())
@@ -116,6 +128,17 @@ namespace
 		FString S;
 		if (ActorObj->TryGetStringField(TEXT("StarMesh"), S)) Merged->SetStringField(TEXT("StarMesh"), S);
 		if (ActorObj->TryGetStringField(TEXT("StarMaterial"), S)) Merged->SetStringField(TEXT("StarMaterial"), S);
+		// Per-actor FloorRadius (or in Properties) overrides Defaults.FloorRadius for Small Planet floor scale
+		double FloorRadiusActor = 0.0;
+		if (ActorObj->TryGetNumberField(TEXT("FloorRadius"), FloorRadiusActor) && FloorRadiusActor > 0.0)
+		{
+			Merged->SetNumberField(TEXT("FloorRadius"), FloorRadiusActor);
+		}
+		double PlanetRadiusActor = 0.0;
+		if (ActorObj->TryGetNumberField(TEXT("PlanetRadius"), PlanetRadiusActor) && PlanetRadiusActor > 0.0)
+		{
+			Merged->SetNumberField(TEXT("PlanetRadius"), PlanetRadiusActor);
+		}
 		return Merged;
 	}
 }
@@ -321,6 +344,45 @@ void FPlaceActorsFromDataCommand::Execute(const FString& RelativeFileName)
 				if (USkeletalMeshComponent* SMC = Spawned->FindComponentByClass<USkeletalMeshComponent>())
 				{
 					ApplyPropertiesFromJson(SMC, MergedProps);
+				}
+				if (UStaticMeshComponent* SMComp = Spawned->FindComponentByClass<UStaticMeshComponent>())
+				{
+					ApplyPropertiesFromJson(SMComp, MergedProps);
+				}
+			}
+			// StaticMeshActor: Small Planet floor (flat) or planet sphere. FloorRadius = flat scale (XY = R/50, Z = 0.2). PlanetRadius = sphere scale (uniform R/50).
+			if (AStaticMeshActor* StaticMeshActor = Cast<AStaticMeshActor>(Spawned))
+			{
+				UStaticMeshComponent* SMComp = StaticMeshActor->GetStaticMeshComponent();
+				double PlanetRadius = 0.0;
+				if (MergedProps->TryGetNumberField(TEXT("PlanetRadius"), PlanetRadius) && PlanetRadius > 0.0)
+				{
+					// Planet sphere: always load and assign mesh (Properties string path often doesn't resolve)
+					if (SMComp)
+					{
+						UStaticMesh* SphereMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Shape_Sphere.Shape_Sphere"));
+						if (!SphereMesh) { SphereMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")); }
+						if (SphereMesh) { SMComp->SetStaticMesh(SphereMesh); }
+					}
+					const float R = static_cast<float>(PlanetRadius);
+					Spawned->SetActorScale3D(FVector(R / 50.f, R / 50.f, R / 50.f));
+					Spawned->SetActorLocation(FVector::ZeroVector);
+					Spawned->SetActorLabel(TEXT("Planet"));
+					Spawned->Tags.Add(FName(TEXT("Planet")));
+				}
+				else
+				{
+					if (SMComp && !SMComp->GetStaticMesh())
+					{
+						UStaticMesh* DefaultCube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+						if (DefaultCube) { SMComp->SetStaticMesh(DefaultCube); }
+					}
+					double FloorRadius = 0.0;
+					if (MergedProps->TryGetNumberField(TEXT("FloorRadius"), FloorRadius) && FloorRadius > 0.0)
+					{
+						const float R = static_cast<float>(FloorRadius);
+						Spawned->SetActorScale3D(FVector(R / 50.f, R / 50.f, 0.2f));
+					}
 				}
 			}
 			AGalaxyStarField* StarField = Cast<AGalaxyStarField>(Spawned);
