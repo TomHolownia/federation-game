@@ -2,6 +2,7 @@
 
 #include "Character/FederationCharacter.h"
 #include "Planet/PlanetGravityComponent.h"
+#include "Inventory/InventoryComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -59,6 +60,8 @@ AFederationCharacter::AFederationCharacter(const FObjectInitializer& ObjectIniti
 
 	// Gravity component owns planet detection, capsule alignment, camera orientation, and ground recovery.
 	GravityComp = CreateDefaultSubobject<UPlanetGravityComponent>(TEXT("PlanetGravity"));
+
+	InventoryComp = CreateDefaultSubobject<UInventoryComponent>(TEXT("Inventory"));
 
 	// GroundFriction only applies in Walking mode; FallingLateralFriction (default 0) applies in air.
 	// Do NOT use bUseSeparateBrakingFriction — it overrides falling friction too and kills air velocity.
