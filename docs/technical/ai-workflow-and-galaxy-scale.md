@@ -167,6 +167,7 @@ One scalable approach: keep **placement presets** in Config/PlacementData/ (e.g.
 - **Galaxy scale:** Procedural generation + World Partition + LWC. Don't hand-place.
 - **Hybrid architecture:** Main WP level (`DeepSpace`) for space. Separate streaming levels per planet surface, loaded/unloaded via `UPlanetSurfaceStreamer`. This replaced the earlier "one WP for everything" approach.
 - **Planet surfaces:** Each planet sphere has a `UPlanetSurfaceStreamer` component. Set `SurfaceLevelPath` to the surface level's package name. Gravity switches from radial (space) to standard downward (surface) on transition.
+- **Asset safety rule:** Never modify `/Engine/...` assets directly. Always duplicate/create project assets under `/Game/...` (for example `Content/Federation/Materials/`) first, then version control those project assets before wiring gameplay/runtime logic to them.
 - **Placing actors:** Add or edit JSON in `Config/PlacementData/`, then run **Place Actors From Data** → choose the preset (Level Editor toolbar or **Tools → Federation**). AI edits the JSON files and spawner code; a human (or automation) runs the chosen preset. See format above.
 - **Stress testing:** `APlanetSurfaceStressTest` scatters instanced meshes for benchmarking. Console: `Fed.StressTest.SetCount <N>`.
 - **Your role:** Run the editor command after data changes; placement is repeatable and AI-friendly.

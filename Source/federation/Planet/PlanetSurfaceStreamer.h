@@ -8,6 +8,8 @@
 
 class ULevelStreamingDynamic;
 class UPlanetGravityComponent;
+class UStaticMeshComponent;
+class UMaterialInstanceDynamic;
 
 UENUM(BlueprintType)
 enum class EPlanetStreamingState : uint8
@@ -45,17 +47,66 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
 	FString SurfaceLevelPath;
 
-	/** Distance from planet center at which streaming begins. */
+	/** Distance from planet center at which streaming begins. Should be greater than the planet's visual radius (e.g. SmallPlanet PlanetRadius 100000 → sphere radius 100000; use StreamingRadius 200000 so load starts while approaching). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
 	float StreamingRadius = 200000.f;
 
-	/** Where to place the player relative to the loaded level origin. */
+	/** Distance from planet center at which we teleport to the surface level. If 0 (default), we use the planet actor's bounding radius so it matches your actual planet size. Set a value only to override (e.g. for testing). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
-	FVector SurfaceSpawnOffset = FVector(0.f, 0.f, 500.f);
+	float HandoffRadius = 0.f;
+
+	/** Where to place the player relative to the loaded level origin. Spawn high so player falls onto terrain. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
+	FVector SurfaceSpawnOffset = FVector(0.f, 0.f, 10000.f);
 
 	/** Player altitude above surface-level origin that triggers exit back to space. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
 	float ExitAltitude = 50000.f;
+
+	/** Planet sphere fade: multiplier of planet radius at which fade starts (e.g. 1.2 = start fading when within 1.2x radius). Fade reaches 0 at handoff. Set to 0 to disable. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
+	float FadeStartMultiplier = 1.2f;
+
+	/** Optional absolute radius where fade starts. If > 0, overrides FadeStartMultiplier-derived distance. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
+	float RevealStartRadiusOverride = 0.f;
+
+	/** Optional absolute radius where fade reaches fully hidden. If > 0, overrides handoff-derived distance. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
+	float FullFadeRadiusOverride = 0.f;
+
+	/** Progress easing exponent for fade/reveal (1 = linear, >1 = ease-in, <1 = ease-out). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
+	float FadeEaseExponent = 1.f;
+
+	/** Minimum/maximum reveal patch radius as multipliers of planet radius. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
+	float RevealRadiusMinMultiplier = 0.02f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
+	float RevealRadiusMaxMultiplier = 0.35f;
+
+	/** Soft edge size for reveal patch as multiplier of planet radius. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
+	float RevealSoftnessMultiplier = 0.08f;
+
+	/** Require reveal progress before teleport handoff can occur. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
+	float HandoffMinRevealProgress = 0.9f;
+
+	/** Material scalar parameter name on the planet mesh that drives opacity (0 = invisible, 1 = opaque). Add this parameter to your planet material and multiply opacity by it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
+	FName FadeParameterName = TEXT("FadeAlpha");
+
+	/** Optional material params for directional front reveal. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
+	FName RevealCenterParameterName = TEXT("RevealCenterWS");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
+	FName RevealRadiusParameterName = TEXT("RevealRadius");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
+	FName RevealSoftnessParameterName = TEXT("RevealSoftness");
 
 	// --- Events ---
 
@@ -80,6 +131,9 @@ public:
 
 	/** True if the given squared distance is within StreamingRadius. */
 	bool ShouldStreamIn(float DistanceSq) const;
+
+	/** True if the given squared distance is within HandoffRadius (player at surface; safe to teleport). */
+	bool ShouldTransitionToSurface(float DistanceSq) const;
 
 	/** True if the player's Z (relative to surface origin) exceeds ExitAltitude. */
 	bool ShouldStreamOut(const FVector& PlayerLocation, const FVector& SurfaceOrigin) const;
@@ -112,4 +166,24 @@ private:
 
 	APawn* GetPlayerPawn() const;
 	void SetPlayerGravityComponentActive(bool bActive);
+
+	/** World-space radius of the owner (planet) from its bounding box. 0 if no owner or no bounds. */
+	float GetPlanetRadiusFromOwner() const;
+	/** Handoff radius to use: HandoffRadius if > 0, else planet bounds radius (with fallback). */
+	float GetEffectiveHandoffRadius() const;
+
+	/** Radius at which planet fade starts (FadeStartMultiplier * planet radius). */
+	float GetEffectiveFadeStartRadius() const;
+	float GetEffectiveFullFadeRadius() const;
+	float ComputeRevealProgress(float DistanceToPlayer) const;
+
+	void UpdatePlanetFade(float DistanceToPlayer);
+	void SetPlanetFadeAlpha(float Alpha);
+	void SetPlanetRevealParams(float Progress);
+	void ResetPlanetRevealParams();
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> CachedPlanetFadeMaterial;
+
+	float CurrentRevealProgress = 0.f;
 };

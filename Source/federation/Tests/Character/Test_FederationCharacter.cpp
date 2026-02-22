@@ -8,6 +8,7 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -221,6 +222,91 @@ bool FFederationCharacterSpringArmAbsoluteRotation::RunTest(const FString& Param
 
 	TestTrue(TEXT("ThirdPersonSpringArm should use absolute rotation"),
 		Character->ThirdPersonSpringArm->IsUsingAbsoluteRotation());
+
+	Character->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Flat gravity mode (planet surface streaming)
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterIsUsingFlatGravityWhenGravityCompDisabled,
+	"FederationGame.Character.FederationCharacter.IsUsingFlatGravityWhenGravityCompDisabled",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterIsUsingFlatGravityWhenGravityCompDisabled::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	TestNotNull(TEXT("Character should have GravityComp"), Character->GravityComp.Get());
+	Character->GravityComp->SetComponentTickEnabled(false);
+
+	TestTrue(TEXT("IsUsingFlatGravity should be true when gravity component is tick-disabled"),
+		Character->IsUsingFlatGravity());
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterIsUsingFlatGravityFalseWhenGravityCompEnabled,
+	"FederationGame.Character.FederationCharacter.IsUsingFlatGravityFalseWhenGravityCompEnabled",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterIsUsingFlatGravityFalseWhenGravityCompEnabled::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	TestNotNull(TEXT("Character should have GravityComp"), Character->GravityComp.Get());
+	Character->GravityComp->SetComponentTickEnabled(true);
+
+	TestFalse(TEXT("IsUsingFlatGravity should be false when gravity component is tick-enabled"),
+		Character->IsUsingFlatGravity());
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterFlatModeCameraSyncsToControlRotation,
+	"FederationGame.Character.FederationCharacter.FlatModeCameraSyncsToControlRotation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterFlatModeCameraSyncsToControlRotation::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	if (!PC) { AddError(TEXT("No player controller")); return false; }
+
+	PC->Possess(Character);
+	Character->GravityComp->SetComponentTickEnabled(false);
+
+	const FRotator DesiredControlRot(15.f, 45.f, 0.f);
+	PC->SetControlRotation(DesiredControlRot);
+
+	Character->UpdateCameraForFlatMode();
+
+	const FRotator RootRot = Character->FirstPersonCameraRoot->GetComponentRotation();
+	TestEqual(TEXT("FirstPersonCameraRoot pitch should match control rotation"), static_cast<float>(RootRot.Pitch), static_cast<float>(DesiredControlRot.Pitch), 0.1f);
+	TestEqual(TEXT("FirstPersonCameraRoot yaw should match control rotation"), static_cast<float>(RootRot.Yaw), static_cast<float>(DesiredControlRot.Yaw), 0.1f);
 
 	Character->Destroy();
 	return true;

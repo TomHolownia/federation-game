@@ -96,6 +96,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gravity")
 	TObjectPtr<UPlanetGravityComponent> GravityComp;
 
+	/** True when using flat gravity (e.g. on streamed surface level). When true, movement/look use control rotation and camera is driven from controller. */
+	UFUNCTION(BlueprintCallable, Category = "Gravity")
+	bool IsUsingFlatGravity() const;
+
+	/** Syncs first- and third-person camera to the controller's control rotation. Used in flat mode each tick; exposed for tests. */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void UpdateCameraForFlatMode();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
