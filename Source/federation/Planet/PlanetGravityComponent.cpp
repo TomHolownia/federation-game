@@ -15,6 +15,11 @@ UPlanetGravityComponent::UPlanetGravityComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
+void UPlanetGravityComponent::SetSurfaceBlendAlpha(float InAlpha)
+{
+	SurfaceBlendAlpha = FMath::Clamp(InAlpha, 0.f, 1.f);
+}
+
 void UPlanetGravityComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -118,6 +123,15 @@ void UPlanetGravityComponent::UpdatePlanetGravity()
 	}
 
 	FVector Dir = ToPlanet / Len;
+	if (SurfaceBlendAlpha > 0.f)
+	{
+		// Blend from radial gravity to world-down near surface transitions.
+		Dir = FMath::Lerp(Dir, FVector::DownVector, SurfaceBlendAlpha).GetSafeNormal();
+		if (Dir.IsNearlyZero())
+		{
+			Dir = FVector::DownVector;
+		}
+	}
 	if (CMC) CMC->SetGravityDirection(Dir);
 	GravityDir = Dir;
 }
@@ -128,6 +142,7 @@ void UPlanetGravityComponent::UpdatePlanetGravity()
 
 void UPlanetGravityComponent::UpdateGravityAlignment(float DeltaTime)
 {
+	if (SurfaceBlendAlpha >= 0.5f) return;
 	if (!bAlignToGravity) return;
 	if (GravityDir.IsNearlyZero()) return;
 
@@ -175,7 +190,7 @@ void UPlanetGravityComponent::UpdateCameraOrientation()
 {
 	if (!FirstPersonCameraRoot) return;
 
-	const bool bGravityActive = bUseGravityRelativeLook && bAlignToGravity && !GravityDir.IsNearlyZero();
+	const bool bGravityActive = bUseGravityRelativeLook && bAlignToGravity && !GravityDir.IsNearlyZero() && SurfaceBlendAlpha < 0.5f;
 	if (!bGravityActive)
 	{
 		if (ThirdPersonSpringArm)

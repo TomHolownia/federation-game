@@ -93,7 +93,11 @@ void AFederationCharacter::BeginPlay()
 
 bool AFederationCharacter::IsUsingFlatGravity() const
 {
-	return !GravityComp || !GravityComp->IsComponentTickEnabled();
+	if (!GravityComp || !GravityComp->IsComponentTickEnabled())
+	{
+		return true;
+	}
+	return GravityComp->GetSurfaceBlendAlpha() >= 0.5f;
 }
 
 void AFederationCharacter::UpdateCameraForFlatMode()

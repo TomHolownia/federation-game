@@ -312,4 +312,52 @@ bool FFederationCharacterFlatModeCameraSyncsToControlRotation::RunTest(const FSt
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterFlatGravityWhenSurfaceBlendHigh,
+	"FederationGame.Character.FederationCharacter.FlatGravityWhenSurfaceBlendHigh",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterFlatGravityWhenSurfaceBlendHigh::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+	if (!Character->GravityComp) { AddError(TEXT("Missing GravityComp")); return false; }
+
+	Character->GravityComp->SetComponentTickEnabled(true);
+	Character->GravityComp->SetSurfaceBlendAlpha(0.75f);
+
+	TestTrue(TEXT("Character should use flat gravity when blend alpha is high"), Character->IsUsingFlatGravity());
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterRadialGravityWhenSurfaceBlendLow,
+	"FederationGame.Character.FederationCharacter.RadialGravityWhenSurfaceBlendLow",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterRadialGravityWhenSurfaceBlendLow::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+	if (!Character->GravityComp) { AddError(TEXT("Missing GravityComp")); return false; }
+
+	Character->GravityComp->SetComponentTickEnabled(true);
+	Character->GravityComp->SetSurfaceBlendAlpha(0.25f);
+
+	TestFalse(TEXT("Character should remain radial-gravity mode when blend alpha is low"), Character->IsUsingFlatGravity());
+
+	Character->Destroy();
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

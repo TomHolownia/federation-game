@@ -20,6 +20,66 @@ enum class EPlanetStreamingState : uint8
 	Unloading
 };
 
+UENUM(BlueprintType)
+enum class EPlanetTransitionMode : uint8
+{
+	LegacyHandover UMETA(DisplayName = "Legacy Handover"),
+	BlendedAligned UMETA(DisplayName = "Blended Aligned"),
+	UnifiedSeamless UMETA(DisplayName = "Unified Seamless")
+};
+
+USTRUCT(BlueprintType)
+struct FPlanetTransitionProfile
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition")
+	EPlanetTransitionMode TransitionMode = EPlanetTransitionMode::BlendedAligned;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
+	bool bUseAdaptiveRadii = true;
+
+	/** If true, positive StreamingRadius/HandoffRadius values override adaptive radii. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
+	bool bUseExplicitRadiiOverrides = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
+	float BaseStreamingRadiusMultiplier = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
+	float BaseHandoffRadiusMultiplier = 1.05f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
+	float MinStreamingRadiusMultiplier = 1.3f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
+	float MaxStreamingRadiusMultiplier = 8.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
+	float MinHandoffRadiusMultiplier = 1.01f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
+	float MaxHandoffRadiusMultiplier = 1.8f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
+	float LoadLatencyBudgetSeconds = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
+	float HandoffSettleBudgetSeconds = 0.8f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
+	float MinApproachLeadTimeSeconds = 1.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
+	float MaxAssumedApproachSpeed = 50000.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Blend")
+	float SurfaceBlendDurationSeconds = 0.8f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Blend")
+	bool bAllowLegacyFallback = true;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSurfaceStreamingEvent);
 
 /**
@@ -63,9 +123,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
 	float ExitAltitude = 50000.f;
 
+	/** Per-planet transition profile. Each planet can opt into legacy or blended/unified behavior independently. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Transition")
+	FPlanetTransitionProfile TransitionProfile;
+
 	/** Planet sphere fade: multiplier of planet radius at which fade starts (e.g. 1.2 = start fading when within 1.2x radius). Fade reaches 0 at handoff. Set to 0 to disable. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
-	float FadeStartMultiplier = 1.2f;
+	float FadeStartMultiplier = 0.f;
 
 	/** Optional absolute radius where fade starts. If > 0, overrides FadeStartMultiplier-derived distance. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming|Fade")
@@ -132,8 +196,20 @@ public:
 	/** True if the given squared distance is within StreamingRadius. */
 	bool ShouldStreamIn(float DistanceSq) const;
 
+	/** Streaming radius currently in effect (manual override or adaptive). */
+	float GetEffectiveStreamingRadius() const;
+
 	/** True if the given squared distance is within HandoffRadius (player at surface; safe to teleport). */
 	bool ShouldTransitionToSurface(float DistanceSq) const;
+
+	/** Radial approach speed toward planet center (UU/s). */
+	float GetPlayerApproachSpeedTowardPlanet() const;
+
+	/** Adaptive size+speed streaming radius. */
+	float ComputeAdaptiveStreamingRadius(float PlanetRadius, float ApproachSpeed) const;
+
+	/** Adaptive size+speed handoff radius. */
+	float ComputeAdaptiveHandoffRadius(float PlanetRadius, float ApproachSpeed) const;
 
 	/** True if the player's Z (relative to surface origin) exceeds ExitAltitude. */
 	bool ShouldStreamOut(const FVector& PlayerLocation, const FVector& SurfaceOrigin) const;
@@ -186,4 +262,11 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> CachedPlanetFadeMaterial;
 
 	float CurrentRevealProgress = 0.f;
+
+	FVector SurfaceLevelWorldOrigin = FVector::ZeroVector;
+
+	bool bOwnsTransitionLock = false;
+
+	bool TryAcquireTransitionLock();
+	void ReleaseTransitionLock();
 };

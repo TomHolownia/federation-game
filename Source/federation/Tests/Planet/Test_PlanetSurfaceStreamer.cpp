@@ -339,4 +339,140 @@ bool FPlanetSurfaceStreamerStreamOutLateralDistance::RunTest(const FString& Para
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// 11. Adaptive streaming radius grows with approach speed
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetSurfaceStreamerAdaptiveStreamingRadiusBySpeed,
+	"FederationGame.Planet.PlanetSurfaceStreamer.AdaptiveStreamingRadiusBySpeed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetSurfaceStreamerAdaptiveStreamingRadiusBySpeed::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnActorWithStreamer(World, Comp);
+	if (!Actor || !Comp) { AddError(TEXT("Failed to spawn")); return false; }
+
+	Comp->TransitionProfile.bUseAdaptiveRadii = true;
+	const float PlanetRadius = 100000.f;
+
+	const float RadiusSlow = Comp->ComputeAdaptiveStreamingRadius(PlanetRadius, 500.f);
+	const float RadiusFast = Comp->ComputeAdaptiveStreamingRadius(PlanetRadius, 25000.f);
+
+	TestTrue(TEXT("Adaptive streaming radius should grow with approach speed"), RadiusFast > RadiusSlow);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 12. Adaptive handoff radius grows with approach speed
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetSurfaceStreamerAdaptiveHandoffRadiusBySpeed,
+	"FederationGame.Planet.PlanetSurfaceStreamer.AdaptiveHandoffRadiusBySpeed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetSurfaceStreamerAdaptiveHandoffRadiusBySpeed::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnActorWithStreamer(World, Comp);
+	if (!Actor || !Comp) { AddError(TEXT("Failed to spawn")); return false; }
+
+	Comp->TransitionProfile.bUseAdaptiveRadii = true;
+	const float PlanetRadius = 100000.f;
+
+	const float RadiusSlow = Comp->ComputeAdaptiveHandoffRadius(PlanetRadius, 500.f);
+	const float RadiusFast = Comp->ComputeAdaptiveHandoffRadius(PlanetRadius, 25000.f);
+
+	TestTrue(TEXT("Adaptive handoff radius should grow with approach speed"), RadiusFast > RadiusSlow);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 13. Per-planet profiles remain isolated
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetSurfaceStreamerPerPlanetProfileIsolation,
+	"FederationGame.Planet.PlanetSurfaceStreamer.PerPlanetProfileIsolation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetSurfaceStreamerPerPlanetProfileIsolation::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	UPlanetSurfaceStreamer* CompA = nullptr;
+	UPlanetSurfaceStreamer* CompB = nullptr;
+	AActor* ActorA = SpawnActorWithStreamer(World, CompA);
+	AActor* ActorB = SpawnActorWithStreamer(World, CompB);
+	if (!ActorA || !CompA || !ActorB || !CompB) { AddError(TEXT("Failed to spawn")); return false; }
+
+	CompA->TransitionProfile.BaseStreamingRadiusMultiplier = 1.8f;
+	CompB->TransitionProfile.BaseStreamingRadiusMultiplier = 3.6f;
+
+	const float PlanetRadius = 100000.f;
+	const float ApproachSpeed = 5000.f;
+	const float RadiusA = CompA->ComputeAdaptiveStreamingRadius(PlanetRadius, ApproachSpeed);
+	const float RadiusB = CompB->ComputeAdaptiveStreamingRadius(PlanetRadius, ApproachSpeed);
+
+	TestTrue(TEXT("Different per-planet profiles should produce different adaptive radii"), !FMath::IsNearlyEqual(RadiusA, RadiusB, 0.1f));
+
+	ActorA->Destroy();
+	ActorB->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 14. Multi-planet state isolation across save/restore
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetSurfaceStreamerMultiPlanetStateIsolation,
+	"FederationGame.Planet.PlanetSurfaceStreamer.MultiPlanetStateIsolation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetSurfaceStreamerMultiPlanetStateIsolation::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	UPlanetSurfaceStreamer* CompA = nullptr;
+	UPlanetSurfaceStreamer* CompB = nullptr;
+	AActor* ActorA = SpawnActorWithStreamer(World, CompA);
+	AActor* ActorB = SpawnActorWithStreamer(World, CompB);
+	if (!ActorA || !CompA || !ActorB || !CompB) { AddError(TEXT("Failed to spawn")); return false; }
+
+	CompA->SaveSpacePosition(FVector(100.f, 0.f, 0.f), FRotator(0.f, 10.f, 0.f));
+	CompB->SaveSpacePosition(FVector(200.f, 0.f, 0.f), FRotator(0.f, 20.f, 0.f));
+
+	FVector OutLocA, OutLocB;
+	FRotator OutRotA, OutRotB;
+	CompA->GetSavedSpacePosition(OutLocA, OutRotA);
+	CompB->GetSavedSpacePosition(OutLocB, OutRotB);
+
+	TestTrue(TEXT("Planet A state should remain independent"), OutLocA.Equals(FVector(100.f, 0.f, 0.f), 0.1f));
+	TestTrue(TEXT("Planet B state should remain independent"), OutLocB.Equals(FVector(200.f, 0.f, 0.f), 0.1f));
+	TestTrue(TEXT("Planet A and B rotations should remain independent"), !OutRotA.Equals(OutRotB, 0.1f));
+
+	ActorA->Destroy();
+	ActorB->Destroy();
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

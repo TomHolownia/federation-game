@@ -14,6 +14,11 @@
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
+namespace
+{
+	TWeakObjectPtr<UPlanetSurfaceStreamer> GPlanetTransitionOwner;
+}
+
 UPlanetSurfaceStreamer::UPlanetSurfaceStreamer()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -104,7 +109,17 @@ float UPlanetSurfaceStreamer::GetPlanetRadiusFromOwner() const
 
 float UPlanetSurfaceStreamer::GetEffectiveHandoffRadius() const
 {
-	if (HandoffRadius > 0.f) return HandoffRadius;
+	if (TransitionProfile.bUseExplicitRadiiOverrides && HandoffRadius > 0.f) return HandoffRadius;
+
+	if (TransitionProfile.bUseAdaptiveRadii)
+	{
+		const float PlanetRadius = GetPlanetRadiusFromOwner();
+		if (PlanetRadius > 0.f)
+		{
+			return ComputeAdaptiveHandoffRadius(PlanetRadius, GetPlayerApproachSpeedTowardPlanet());
+		}
+	}
+
 	const float PlanetRadius = GetPlanetRadiusFromOwner();
 	if (PlanetRadius <= 0.f) return 100000.f;
 	// Add margin so we trigger when at the surface (player center can be slightly outside radius when standing on the sphere).
@@ -114,13 +129,84 @@ float UPlanetSurfaceStreamer::GetEffectiveHandoffRadius() const
 
 bool UPlanetSurfaceStreamer::ShouldStreamIn(float DistanceSq) const
 {
-	return DistanceSq <= (StreamingRadius * StreamingRadius);
+	const float Radius = GetEffectiveStreamingRadius();
+	return DistanceSq <= (Radius * Radius);
+}
+
+float UPlanetSurfaceStreamer::GetEffectiveStreamingRadius() const
+{
+	if (TransitionProfile.bUseExplicitRadiiOverrides && StreamingRadius > 0.f)
+	{
+		return StreamingRadius;
+	}
+
+	const float PlanetRadius = GetPlanetRadiusFromOwner();
+	if (PlanetRadius <= 0.f)
+	{
+		return 200000.f;
+	}
+
+	if (!TransitionProfile.bUseAdaptiveRadii)
+	{
+		return FMath::Max(PlanetRadius * 2.f, 10000.f);
+	}
+
+	return ComputeAdaptiveStreamingRadius(PlanetRadius, GetPlayerApproachSpeedTowardPlanet());
 }
 
 bool UPlanetSurfaceStreamer::ShouldTransitionToSurface(float DistanceSq) const
 {
 	const float R = GetEffectiveHandoffRadius();
 	return DistanceSq <= (R * R);
+}
+
+float UPlanetSurfaceStreamer::GetPlayerApproachSpeedTowardPlanet() const
+{
+	const AActor* Owner = GetOwner();
+	const APawn* PlayerPawn = GetPlayerPawn();
+	if (!Owner || !PlayerPawn)
+	{
+		return 0.f;
+	}
+
+	const FVector ToPlanet = (Owner->GetActorLocation() - PlayerPawn->GetActorLocation()).GetSafeNormal();
+	if (ToPlanet.IsNearlyZero())
+	{
+		return 0.f;
+	}
+
+	const float TowardSpeed = FVector::DotProduct(PlayerPawn->GetVelocity(), ToPlanet);
+	return FMath::Max(0.f, TowardSpeed);
+}
+
+float UPlanetSurfaceStreamer::ComputeAdaptiveStreamingRadius(float PlanetRadius, float ApproachSpeed) const
+{
+	const float SafePlanetRadius = FMath::Max(1.f, PlanetRadius);
+	const float SafeApproach = FMath::Clamp(ApproachSpeed, 0.f, FMath::Max(0.f, TransitionProfile.MaxAssumedApproachSpeed));
+	const float TimeBudget = FMath::Max(TransitionProfile.LoadLatencyBudgetSeconds, TransitionProfile.MinApproachLeadTimeSeconds);
+
+	const float BaseRadius = SafePlanetRadius * FMath::Max(1.f, TransitionProfile.BaseStreamingRadiusMultiplier);
+	const float SpeedMargin = SafeApproach * FMath::Max(0.f, TimeBudget);
+	const float Computed = BaseRadius + SpeedMargin;
+
+	const float MinRadius = SafePlanetRadius * FMath::Max(1.f, TransitionProfile.MinStreamingRadiusMultiplier);
+	const float MaxRadius = SafePlanetRadius * FMath::Max(TransitionProfile.MinStreamingRadiusMultiplier, TransitionProfile.MaxStreamingRadiusMultiplier);
+	return FMath::Clamp(Computed, MinRadius, MaxRadius);
+}
+
+float UPlanetSurfaceStreamer::ComputeAdaptiveHandoffRadius(float PlanetRadius, float ApproachSpeed) const
+{
+	const float SafePlanetRadius = FMath::Max(1.f, PlanetRadius);
+	const float SafeApproach = FMath::Clamp(ApproachSpeed, 0.f, FMath::Max(0.f, TransitionProfile.MaxAssumedApproachSpeed));
+	const float SettleBudget = FMath::Max(0.f, TransitionProfile.HandoffSettleBudgetSeconds);
+
+	const float BaseRadius = SafePlanetRadius * FMath::Max(1.f, TransitionProfile.BaseHandoffRadiusMultiplier);
+	const float SpeedMargin = SafeApproach * SettleBudget;
+	const float Computed = BaseRadius + SpeedMargin;
+
+	const float MinRadius = SafePlanetRadius * FMath::Max(1.f, TransitionProfile.MinHandoffRadiusMultiplier);
+	const float MaxRadius = SafePlanetRadius * FMath::Max(TransitionProfile.MinHandoffRadiusMultiplier, TransitionProfile.MaxHandoffRadiusMultiplier);
+	return FMath::Clamp(Computed, MinRadius, MaxRadius);
 }
 
 float UPlanetSurfaceStreamer::GetEffectiveFadeStartRadius() const
@@ -254,20 +340,22 @@ void UPlanetSurfaceStreamer::UpdateIdleState()
 void UPlanetSurfaceStreamer::UpdateLoadingState()
 {
 	if (!StreamedLevel) return;
+	if (!StreamedLevel->HasLoadedLevel()) return;
 
-	if (StreamedLevel->HasLoadedLevel())
-	{
-		const float DistSq = GetDistanceToPlayerSquared();
-		const float Dist = FMath::Sqrt(DistSq);
-		const float HandoffR = GetEffectiveHandoffRadius();
-		if (ShouldTransitionToSurface(DistSq) && CurrentRevealProgress >= HandoffMinRevealProgress)
-		{
-			TransitionPlayerToSurface();
-			StreamingState = EPlanetStreamingState::OnSurface;
-			OnSurfaceLoaded.Broadcast();
-			UE_LOG(LogTemp, Log, TEXT("PlanetSurfaceStreamer: Surface level loaded, player at surface (dist=%.0f, handoff=%.0f, reveal=%.2f) — transitioned to surface."), Dist, HandoffR, CurrentRevealProgress);
-		}
-	}
+	const float DistSq = GetDistanceToPlayerSquared();
+	if (!ShouldTransitionToSurface(DistSq)) return;
+	const bool bFadeActive = FadeStartMultiplier > 0.f;
+	if (bFadeActive && CurrentRevealProgress < HandoffMinRevealProgress) return;
+	if (!TryAcquireTransitionLock()) return;
+
+	TransitionPlayerToSurface();
+	StreamingState = EPlanetStreamingState::OnSurface;
+	OnSurfaceLoaded.Broadcast();
+
+	const float Dist = FMath::Sqrt(DistSq);
+	const float HandoffR = GetEffectiveHandoffRadius();
+	const float StreamR = GetEffectiveStreamingRadius();
+	UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: === HANDOVER === dist=%.0f, handoff=%.0f, streaming=%.0f, reveal=%.2f"), Dist, HandoffR, StreamR, CurrentRevealProgress);
 }
 
 void UPlanetSurfaceStreamer::UpdateOnSurfaceState()
@@ -275,10 +363,7 @@ void UPlanetSurfaceStreamer::UpdateOnSurfaceState()
 	APawn* PlayerPawn = GetPlayerPawn();
 	if (!PlayerPawn) return;
 
-	AActor* Owner = GetOwner();
-	const FVector SurfaceOrigin = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
-
-	if (ShouldStreamOut(PlayerPawn->GetActorLocation(), SurfaceOrigin))
+	if (ShouldStreamOut(PlayerPawn->GetActorLocation(), SurfaceLevelWorldOrigin))
 	{
 		BeginStreamOut();
 	}
@@ -294,6 +379,7 @@ void UPlanetSurfaceStreamer::UpdateUnloadingState()
 
 	if (!StreamedLevel->HasLoadedLevel())
 	{
+		ReleaseTransitionLock();
 		StreamedLevel = nullptr;
 		StreamingState = EPlanetStreamingState::Idle;
 		OnSurfaceUnloaded.Broadcast();
@@ -322,11 +408,25 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 		SaveSpacePosition(PlayerPawn->GetActorLocation(), PlayerPawn->GetActorRotation());
 	}
 
+	const AActor* Owner = GetOwner();
+	const FVector PlanetCenter = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
+	const float PlanetRadius = GetPlanetRadiusFromOwner();
+
+	// Place the level at the planet's surface facing the player so the terrain
+	// renders IN FRONT of the planet sphere during approach.
+	FVector LevelLoadLocation = PlanetCenter;
+	if (PlayerPawn && PlanetRadius > 0.f)
+	{
+		const FVector ToPlayer = (PlayerPawn->GetActorLocation() - PlanetCenter).GetSafeNormal();
+		LevelLoadLocation = PlanetCenter + ToPlayer * PlanetRadius;
+	}
+	SurfaceLevelWorldOrigin = LevelLoadLocation;
+
 	bool bSuccess = false;
 	StreamedLevel = ULevelStreamingDynamic::LoadLevelInstance(
 		World,
 		SurfaceLevelPath,
-		FVector::ZeroVector,
+		LevelLoadLocation,
 		FRotator::ZeroRotator,
 		bSuccess
 	);
@@ -334,9 +434,9 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 	if (bSuccess && StreamedLevel)
 	{
 		StreamedLevel->SetShouldBeLoaded(true);
-		StreamedLevel->SetShouldBeVisible(true);  // Must be visible for level to complete loading and transition to work; surface sky may show briefly until we land
+		StreamedLevel->SetShouldBeVisible(true);
 		StreamingState = EPlanetStreamingState::Loading;
-		UE_LOG(LogTemp, Log, TEXT("PlanetSurfaceStreamer: Began streaming in '%s'."), *SurfaceLevelPath);
+		UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: === STREAM START === level='%s' at surface pos (%.0f, %.0f, %.0f), planet radius=%.0f"), *SurfaceLevelPath, LevelLoadLocation.X, LevelLoadLocation.Y, LevelLoadLocation.Z, PlanetRadius);
 	}
 	else
 	{
@@ -350,55 +450,81 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSurface()
 	APawn* PlayerPawn = GetPlayerPawn();
 	if (!PlayerPawn) return;
 
-	// Hide the planet sphere so it doesn't appear on the surface
 	AActor* Owner = GetOwner();
+	AFederationCharacter* FedChar = Cast<AFederationCharacter>(PlayerPawn);
+	ACharacter* Char = Cast<ACharacter>(PlayerPawn);
+	UPlanetGravityComponent* GravComp = PlayerPawn->FindComponentByClass<UPlanetGravityComponent>();
+	APlayerController* PC = Char ? Cast<APlayerController>(Char->GetController()) : nullptr;
+
+	// --- 1. Capture current look direction before any state changes ---
+	FRotator PreservedLook = FRotator::ZeroRotator;
+	if (GravComp && GravComp->IsGravityViewInitialized())
+	{
+		const FVector Up = GravComp->GetGravityUp();
+		const FVector Fwd = GravComp->GetViewTangentForward();
+		const float Pitch = FMath::RadiansToDegrees(GravComp->GetViewPitchRad());
+		const float Yaw = FMath::Atan2(Fwd.Y, Fwd.X) * (180.f / PI);
+		PreservedLook = FRotator(FMath::ClampAngle(Pitch, -85.f, 85.f), Yaw, 0.f);
+	}
+	else if (PC)
+	{
+		const FRotator CR = PC->GetControlRotation();
+		PreservedLook = FRotator(FMath::ClampAngle(CR.Pitch, -85.f, 85.f), CR.Yaw, 0.f);
+	}
+
+	// --- 2. Capture incoming velocity ---
+	const FVector IncomingVelocity = PlayerPawn->GetVelocity();
+
+	// --- 3. Position player on surface level (loaded at planet surface facing player) ---
+	// Use actual distance from the surface level origin so the perceived height matches.
+	const float DistToSurface = FVector::Dist(PlayerPawn->GetActorLocation(), SurfaceLevelWorldOrigin);
+	const float EntryAltitude = FMath::Max(300.f, DistToSurface);
+	PlayerPawn->SetActorLocation(SurfaceLevelWorldOrigin + FVector(SurfaceSpawnOffset.X, SurfaceSpawnOffset.Y, EntryAltitude));
+	if (Char)
+	{
+		Char->SetActorRotation(FRotator(0.f, PreservedLook.Yaw, 0.f));
+	}
+
+	// --- 4. Hide planet shell (should already be nearly invisible from fade) ---
 	if (Owner)
 	{
 		Owner->SetActorHiddenInGame(true);
 		Owner->SetActorEnableCollision(false);
 	}
 
-	PlayerPawn->SetActorLocation(SurfaceSpawnOffset);
-	PlayerPawn->SetActorRotation(FRotator::ZeroRotator);
+	// --- 5. Switch to flat gravity + preserve velocity ---
+	if (Char && Char->GetCharacterMovement())
+	{
+		Char->GetCharacterMovement()->SetGravityDirection(FVector::DownVector);
+		const float DownSpeed = FMath::Max(0.f, -IncomingVelocity.Z);
+		Char->GetCharacterMovement()->Velocity = FVector(IncomingVelocity.X, IncomingVelocity.Y, -DownSpeed);
+	}
 
-	SetPlayerGravityComponentActive(false);
+	// --- 6. Set camera to preserved look direction ---
+	if (FedChar && FedChar->FirstPersonCameraRoot)
+	{
+		FedChar->FirstPersonCameraRoot->SetWorldRotation(PreservedLook);
+		FedChar->FirstPersonCameraRoot->SetRelativeRotation(FRotator::ZeroRotator);
+	}
 
-	// Reset gravity component state so any remaining reads are consistent with flat world.
-	UPlanetGravityComponent* GravComp = PlayerPawn->FindComponentByClass<UPlanetGravityComponent>();
+	if (Char)
+	{
+		Char->bUseControllerRotationYaw = true;
+		Char->bUseControllerRotationPitch = true;
+	}
+	if (PC)
+	{
+		PC->SetControlRotation(PreservedLook);
+	}
+
+	// --- 7. Reset gravity component to flat-world state ---
 	if (GravComp)
 	{
 		GravComp->GravityDir = FVector::DownVector;
 		GravComp->bViewInitialized = false;
+		GravComp->SetSurfaceBlendAlpha(1.f);
 	}
-
-	AFederationCharacter* FedChar = Cast<AFederationCharacter>(PlayerPawn);
-	ACharacter* Char = Cast<ACharacter>(PlayerPawn);
-	if (Char)
-	{
-		if (Char->GetCharacterMovement())
-		{
-			Char->GetCharacterMovement()->SetGravityDirection(FVector::DownVector);
-		}
-
-		// Reset camera root rotation so the view isn't stuck in the last gravity-relative orientation.
-		// FirstPersonCameraRoot uses absolute rotation, so we need to reset it explicitly.
-		if (FedChar && FedChar->FirstPersonCameraRoot)
-		{
-			FedChar->FirstPersonCameraRoot->SetWorldRotation(FRotator::ZeroRotator);
-			// Reset relative rotation too, in case it was offset
-			FedChar->FirstPersonCameraRoot->SetRelativeRotation(FRotator::ZeroRotator);
-		}
-
-		// Re-enable controller rotation so standard mouse look works on the surface
-		Char->bUseControllerRotationYaw = true;
-		Char->bUseControllerRotationPitch = true;
-		
-		// Reset control rotation to match actor rotation
-		if (APlayerController* PC = Cast<APlayerController>(Char->GetController()))
-		{
-			PC->SetControlRotation(FRotator::ZeroRotator);
-		}
-	}
+	SetPlayerGravityComponentActive(false);
 }
 
 void UPlanetSurfaceStreamer::BeginStreamOut()
@@ -444,6 +570,12 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSpace()
 	}
 
 	SetPlayerGravityComponentActive(true);
+
+	if (UPlanetGravityComponent* GravComp = PlayerPawn->FindComponentByClass<UPlanetGravityComponent>())
+	{
+		GravComp->SetSurfaceBlendAlpha(0.f);
+	}
+	ReleaseTransitionLock();
 }
 
 // ---------------------------------------------------------------------------
@@ -466,5 +598,31 @@ void UPlanetSurfaceStreamer::SetPlayerGravityComponentActive(bool bActive)
 	if (GravComp)
 	{
 		GravComp->SetComponentTickEnabled(bActive);
+		if (bActive)
+		{
+			GravComp->SetSurfaceBlendAlpha(0.f);
+		}
 	}
 }
+
+
+bool UPlanetSurfaceStreamer::TryAcquireTransitionLock()
+{
+	if (GPlanetTransitionOwner.IsValid() && GPlanetTransitionOwner.Get() != this)
+	{
+		return false;
+	}
+	GPlanetTransitionOwner = this;
+	bOwnsTransitionLock = true;
+	return true;
+}
+
+void UPlanetSurfaceStreamer::ReleaseTransitionLock()
+{
+	if (bOwnsTransitionLock && GPlanetTransitionOwner.Get() == this)
+	{
+		GPlanetTransitionOwner.Reset();
+	}
+	bOwnsTransitionLock = false;
+}
+
