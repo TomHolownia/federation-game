@@ -340,9 +340,22 @@ void UPlanetSurfaceStreamer::UpdateIdleState()
 void UPlanetSurfaceStreamer::UpdateLoadingState()
 {
 	if (!StreamedLevel) return;
-	if (!StreamedLevel->HasLoadedLevel()) return;
 
 	const float DistSq = GetDistanceToPlayerSquared();
+
+	// If player has moved beyond streaming radius, unload the level.
+	if (!ShouldStreamIn(DistSq))
+	{
+		StreamedLevel->SetShouldBeLoaded(false);
+		StreamedLevel->SetShouldBeVisible(false);
+		StreamedLevel->SetIsRequestingUnloadAndRemoval(true);
+		StreamingState = EPlanetStreamingState::Unloading;
+		UE_LOG(LogTemp, Log, TEXT("PlanetSurfaceStreamer: Player left streaming range, unloading level."));
+		return;
+	}
+
+	if (!StreamedLevel->HasLoadedLevel()) return;
+
 	if (!ShouldTransitionToSurface(DistSq)) return;
 	const bool bFadeActive = FadeStartMultiplier > 0.f;
 	if (bFadeActive && CurrentRevealProgress < HandoffMinRevealProgress) return;
@@ -421,6 +434,7 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 		LevelLoadLocation = PlanetCenter + ToPlayer * PlanetRadius;
 	}
 	SurfaceLevelWorldOrigin = LevelLoadLocation;
+	ComputeTangentFrame(PlanetCenter);
 
 	bool bSuccess = false;
 	StreamedLevel = ULevelStreamingDynamic::LoadLevelInstance(
@@ -475,11 +489,8 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSurface()
 	// --- 2. Capture incoming velocity ---
 	const FVector IncomingVelocity = PlayerPawn->GetVelocity();
 
-	// --- 3. Position player on surface level (loaded at planet surface facing player) ---
-	// Use actual distance from the surface level origin so the perceived height matches.
-	const float DistToSurface = FVector::Dist(PlayerPawn->GetActorLocation(), SurfaceLevelWorldOrigin);
-	const float EntryAltitude = FMath::Max(300.f, DistToSurface);
-	PlayerPawn->SetActorLocation(SurfaceLevelWorldOrigin + FVector(SurfaceSpawnOffset.X, SurfaceSpawnOffset.Y, EntryAltitude));
+	// --- 3. Position player on surface level (altitude mirrors space distance) ---
+	PlayerPawn->SetActorLocation(SpaceToSurfacePosition(PlayerPawn->GetActorLocation()));
 	if (Char)
 	{
 		Char->SetActorRotation(FRotator(0.f, PreservedLook.Yaw, 0.f));
@@ -531,15 +542,10 @@ void UPlanetSurfaceStreamer::BeginStreamOut()
 {
 	TransitionPlayerToSpace();
 
-	if (StreamedLevel)
-	{
-		StreamedLevel->SetShouldBeLoaded(false);
-		StreamedLevel->SetShouldBeVisible(false);
-		StreamedLevel->SetIsRequestingUnloadAndRemoval(true);
-	}
-
-	StreamingState = EPlanetStreamingState::Unloading;
-	UE_LOG(LogTemp, Log, TEXT("PlanetSurfaceStreamer: Began streaming out surface level."));
+	// Keep the level loaded and visible so the player can see it in deep space
+	// as they fly away. It will be unloaded when they leave streaming range.
+	StreamingState = EPlanetStreamingState::Loading;
+	UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: === EXIT TO SPACE === level kept visible, state=Loading"));
 }
 
 void UPlanetSurfaceStreamer::TransitionPlayerToSpace()
@@ -547,8 +553,19 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSpace()
 	APawn* PlayerPawn = GetPlayerPawn();
 	if (!PlayerPawn) return;
 
-	// Show the planet sphere again and reset fade so it's opaque next time
 	AActor* Owner = GetOwner();
+	ACharacter* Char = Cast<ACharacter>(PlayerPawn);
+	APlayerController* PC = Char ? Cast<APlayerController>(Char->GetController()) : nullptr;
+
+	// --- 1. Capture current look direction before any state changes ---
+	FRotator PreservedLook = FRotator::ZeroRotator;
+	if (PC)
+	{
+		const FRotator CR = PC->GetControlRotation();
+		PreservedLook = FRotator(FMath::ClampAngle(CR.Pitch, -85.f, 85.f), CR.Yaw, 0.f);
+	}
+
+	// --- 2. Show the planet sphere again ---
 	if (Owner)
 	{
 		Owner->SetActorHiddenInGame(false);
@@ -558,13 +575,13 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSpace()
 	ResetPlanetRevealParams();
 	CurrentRevealProgress = 0.f;
 
-	PlayerPawn->SetActorLocation(SavedSpaceLocation);
-	PlayerPawn->SetActorRotation(SavedSpaceRotation);
+	// --- 3. Place player at matching distance from planet surface ---
+	PlayerPawn->SetActorLocation(SurfaceToSpacePosition(PlayerPawn->GetActorLocation()));
 
-	// Restore gravity-relative look (disable controller rotation, gravity comp handles it)
-	ACharacter* Char = Cast<ACharacter>(PlayerPawn);
+	// --- 4. Restore gravity-relative look with preserved direction ---
 	if (Char)
 	{
+		Char->SetActorRotation(FRotator(0.f, PreservedLook.Yaw, 0.f));
 		Char->bUseControllerRotationYaw = false;
 		Char->bUseControllerRotationPitch = false;
 	}
@@ -581,6 +598,63 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSpace()
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+void UPlanetSurfaceStreamer::ComputeTangentFrame(const FVector& PlanetCenter)
+{
+	TangentNormal = (SurfaceLevelWorldOrigin - PlanetCenter).GetSafeNormal();
+	if (TangentNormal.IsNearlyZero())
+	{
+		TangentNormal = FVector::UpVector;
+	}
+
+	const FVector UpHint = FMath::Abs(TangentNormal.Z) < 0.99f ? FVector::UpVector : FVector::ForwardVector;
+	TangentX = FVector::CrossProduct(UpHint, TangentNormal).GetSafeNormal();
+	TangentY = FVector::CrossProduct(TangentNormal, TangentX).GetSafeNormal();
+}
+
+FVector UPlanetSurfaceStreamer::SpaceToSurfacePosition(const FVector& SpacePos) const
+{
+	const AActor* Owner = GetOwner();
+	const FVector PlanetCenter = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
+	const float R = FMath::Max(1.f, GetPlanetRadiusFromOwner());
+
+	const FVector DirToPlayer = (SpacePos - PlanetCenter).GetSafeNormal();
+	const float Altitude = FVector::Dist(SpacePos, PlanetCenter) - R;
+
+	const float DotN = FVector::DotProduct(DirToPlayer, TangentNormal);
+	const float DotX = FVector::DotProduct(DirToPlayer, TangentX);
+	const float DotY = FVector::DotProduct(DirToPlayer, TangentY);
+
+	const float Azimuth = FMath::Atan2(DotX, DotN);
+	const float Elevation = FMath::Atan2(DotY, DotN);
+
+	const float LocalX = Azimuth * R;
+	const float LocalY = Elevation * R;
+	const float LocalZ = FMath::Max(300.f, Altitude);
+
+	return SurfaceLevelWorldOrigin + FVector(LocalX, LocalY, LocalZ);
+}
+
+FVector UPlanetSurfaceStreamer::SurfaceToSpacePosition(const FVector& SurfacePos) const
+{
+	const AActor* Owner = GetOwner();
+	const FVector PlanetCenter = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
+	const float R = FMath::Max(1.f, GetPlanetRadiusFromOwner());
+	const FVector Offset = SurfacePos - SurfaceLevelWorldOrigin;
+	const float Altitude = Offset.Z;
+
+	const float AngleX = Offset.X / R;
+	const float AngleY = Offset.Y / R;
+
+	// Rodrigues rotation: rotate TangentNormal around TangentY by AngleX,
+	// then around TangentX by -AngleY to get the sphere direction.
+	FVector Dir = TangentNormal;
+	Dir = Dir.RotateAngleAxis(FMath::RadiansToDegrees(AngleX), TangentY);
+	Dir = Dir.RotateAngleAxis(-FMath::RadiansToDegrees(AngleY), TangentX);
+	Dir = Dir.GetSafeNormal();
+
+	return PlanetCenter + Dir * (R + FMath::Max(0.f, Altitude));
+}
 
 APawn* UPlanetSurfaceStreamer::GetPlayerPawn() const
 {

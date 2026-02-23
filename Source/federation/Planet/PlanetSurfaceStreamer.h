@@ -226,6 +226,28 @@ public:
 	FVector SavedSpaceLocation = FVector::ZeroVector;
 	FRotator SavedSpaceRotation = FRotator::ZeroRotator;
 
+	// --- Testable internals (public for unit tests) ---
+
+	float GetPlanetRadiusFromOwner() const;
+	float GetEffectiveHandoffRadius() const;
+	float GetEffectiveFadeStartRadius() const;
+	float GetEffectiveFullFadeRadius() const;
+	float ComputeRevealProgress(float DistanceToPlayer) const;
+
+	bool TryAcquireTransitionLock();
+	void ReleaseTransitionLock();
+	bool bOwnsTransitionLock = false;
+
+	FVector SurfaceLevelWorldOrigin = FVector::ZeroVector;
+
+	FVector TangentNormal = FVector::UpVector;
+	FVector TangentX = FVector::ForwardVector;
+	FVector TangentY = FVector::RightVector;
+
+	void ComputeTangentFrame(const FVector& PlanetCenter);
+	FVector SpaceToSurfacePosition(const FVector& SpacePos) const;
+	FVector SurfaceToSpacePosition(const FVector& SurfacePos) const;
+
 private:
 	UPROPERTY()
 	TObjectPtr<ULevelStreamingDynamic> StreamedLevel;
@@ -243,16 +265,6 @@ private:
 	APawn* GetPlayerPawn() const;
 	void SetPlayerGravityComponentActive(bool bActive);
 
-	/** World-space radius of the owner (planet) from its bounding box. 0 if no owner or no bounds. */
-	float GetPlanetRadiusFromOwner() const;
-	/** Handoff radius to use: HandoffRadius if > 0, else planet bounds radius (with fallback). */
-	float GetEffectiveHandoffRadius() const;
-
-	/** Radius at which planet fade starts (FadeStartMultiplier * planet radius). */
-	float GetEffectiveFadeStartRadius() const;
-	float GetEffectiveFullFadeRadius() const;
-	float ComputeRevealProgress(float DistanceToPlayer) const;
-
 	void UpdatePlanetFade(float DistanceToPlayer);
 	void SetPlanetFadeAlpha(float Alpha);
 	void SetPlanetRevealParams(float Progress);
@@ -262,11 +274,4 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> CachedPlanetFadeMaterial;
 
 	float CurrentRevealProgress = 0.f;
-
-	FVector SurfaceLevelWorldOrigin = FVector::ZeroVector;
-
-	bool bOwnsTransitionLock = false;
-
-	bool TryAcquireTransitionLock();
-	void ReleaseTransitionLock();
 };
