@@ -100,6 +100,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gravity")
 	bool IsUsingFlatGravity() const;
 
+	// --- Jetpack ---
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement|Jetpack")
+	float MaxJetpackSpeed = 5000.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement|Jetpack")
+	bool bJetpackActive = false;
+
+	UFUNCTION(BlueprintCallable, Category = "Movement|Jetpack")
+	void ActivateJetpack();
+
+	UFUNCTION(BlueprintCallable, Category = "Movement|Jetpack")
+	void DeactivateJetpack();
+
 	/** Syncs first- and third-person camera to the controller's control rotation. Used in flat mode each tick; exposed for tests. */
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	void UpdateCameraForFlatMode();
@@ -108,6 +122,11 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	virtual void Landed(const FHitResult& Hit) override;
+
+	bool bJetpackThrustUp = false;
+	void OnJumpPressed();
+	void OnJumpReleased();
 
 	void SetupFirstPersonView();
 

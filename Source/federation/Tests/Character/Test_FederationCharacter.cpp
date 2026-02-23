@@ -360,4 +360,107 @@ bool FFederationCharacterRadialGravityWhenSurfaceBlendLow::RunTest(const FString
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// Jetpack
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterJetpackActivatesWhenFalling,
+	"FederationGame.Character.FederationCharacter.JetpackActivatesWhenFalling",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterJetpackActivatesWhenFalling::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	Character->GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+	TestTrue(TEXT("Character should be falling"), Character->GetCharacterMovement()->IsFalling());
+
+	Character->ActivateJetpack();
+
+	TestTrue(TEXT("bJetpackActive should be true"), Character->bJetpackActive);
+	TestTrue(TEXT("Movement mode should be Flying"),
+		Character->GetCharacterMovement()->MovementMode == MOVE_Flying);
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterJetpackDeactivatesOnLanded,
+	"FederationGame.Character.FederationCharacter.JetpackDeactivatesOnLanded",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterJetpackDeactivatesOnLanded::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	Character->ActivateJetpack();
+	TestTrue(TEXT("Jetpack should be active"), Character->bJetpackActive);
+
+	Character->DeactivateJetpack();
+	TestFalse(TEXT("bJetpackActive should be false after deactivation"), Character->bJetpackActive);
+	TestTrue(TEXT("Movement mode should be Falling after deactivation"),
+		Character->GetCharacterMovement()->MovementMode == MOVE_Falling);
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterJetpackSetsMaxFlySpeed,
+	"FederationGame.Character.FederationCharacter.JetpackSetsMaxFlySpeed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterJetpackSetsMaxFlySpeed::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	Character->ActivateJetpack();
+	TestEqual(TEXT("MaxFlySpeed should match MaxJetpackSpeed"),
+		Character->GetCharacterMovement()->MaxFlySpeed, Character->MaxJetpackSpeed);
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterJetpackDoesNotActivateOnGround,
+	"FederationGame.Character.FederationCharacter.JetpackDoesNotActivateOnGround",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterJetpackDoesNotActivateOnGround::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	Character->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	TestFalse(TEXT("Character should not be falling"), Character->GetCharacterMovement()->IsFalling());
+
+	Character->OnJumpPressed();
+	TestFalse(TEXT("Jetpack should NOT activate from ground"), Character->bJetpackActive);
+
+	Character->Destroy();
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

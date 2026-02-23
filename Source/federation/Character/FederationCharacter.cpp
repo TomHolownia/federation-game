@@ -122,6 +122,14 @@ void AFederationCharacter::Tick(float DeltaSeconds)
 	{
 		UpdateCameraForFlatMode();
 	}
+
+	if (bJetpackActive && bJetpackThrustUp)
+	{
+		const FVector Up = (GravityComp && !GravityComp->GetGravityDirection().IsNearlyZero())
+			? GravityComp->GetGravityUp()
+			: FVector::UpVector;
+		AddMovementInput(Up, 1.f);
+	}
 }
 
 
@@ -153,8 +161,8 @@ void AFederationCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		}
 		if (JumpAction)
 		{
-			EIC->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
-			EIC->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+			EIC->BindAction(JumpAction, ETriggerEvent::Started, this, &AFederationCharacter::OnJumpPressed);
+			EIC->BindAction(JumpAction, ETriggerEvent::Completed, this, &AFederationCharacter::OnJumpReleased);
 		}
 		if (ViewToggleAction)
 		{
@@ -409,6 +417,56 @@ void AFederationCharacter::SetThirdPersonView(bool bThirdPerson)
 {
 	bUseThirdPersonView = bThirdPerson;
 	UpdateActiveCamera();
+}
+
+void AFederationCharacter::OnJumpPressed()
+{
+	if (bJetpackActive)
+	{
+		bJetpackThrustUp = true;
+		return;
+	}
+
+	if (GetCharacterMovement() && GetCharacterMovement()->IsFalling())
+	{
+		ActivateJetpack();
+		bJetpackThrustUp = true;
+		return;
+	}
+
+	Jump();
+}
+
+void AFederationCharacter::OnJumpReleased()
+{
+	StopJumping();
+	bJetpackThrustUp = false;
+}
+
+void AFederationCharacter::ActivateJetpack()
+{
+	bJetpackActive = true;
+	if (GetCharacterMovement())
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+		GetCharacterMovement()->MaxFlySpeed = MaxJetpackSpeed;
+	}
+}
+
+void AFederationCharacter::DeactivateJetpack()
+{
+	bJetpackActive = false;
+	bJetpackThrustUp = false;
+	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Flying)
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+	}
+}
+
+void AFederationCharacter::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+	DeactivateJetpack();
 }
 
 void AFederationCharacter::TryLoadDefaultMesh()
