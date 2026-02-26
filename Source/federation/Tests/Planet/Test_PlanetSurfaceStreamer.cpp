@@ -310,12 +310,12 @@ bool FPlanetSurfaceStreamerIdleNoTransitionWithoutPlayer::RunTest(const FString&
 }
 
 // ---------------------------------------------------------------------------
-// 10. ShouldStreamOut: lateral distance also counts
+// 10. ShouldStreamOut: only Z (altitude) counts, not lateral distance
 // ---------------------------------------------------------------------------
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPlanetSurfaceStreamerStreamOutLateralDistance,
-	"FederationGame.Planet.PlanetSurfaceStreamer.StreamOutLateralDistanceCounts",
+	"FederationGame.Planet.PlanetSurfaceStreamer.StreamOutUsesAltitudeNotLateral",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
 )
 
@@ -330,9 +330,9 @@ bool FPlanetSurfaceStreamerStreamOutLateralDistance::RunTest(const FString& Para
 
 	Comp->ExitAltitude = 50000.f;
 	const FVector SurfaceOrigin(0.f, 0.f, 0.f);
-	const FVector PlayerFarLateral(60000.f, 0.f, 0.f);
+	const FVector PlayerFarLateral(60000.f, 0.f, 0.f);  // High X, Z=0
 
-	TestTrue(TEXT("Lateral distance beyond exit altitude should trigger stream out"),
+	TestFalse(TEXT("Lateral distance alone should NOT trigger stream out (only Z/altitude does)"),
 		Comp->ShouldStreamOut(PlayerFarLateral, SurfaceOrigin));
 
 	Actor->Destroy();

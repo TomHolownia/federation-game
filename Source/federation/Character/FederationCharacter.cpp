@@ -118,17 +118,10 @@ void AFederationCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (IsUsingFlatGravity())
+	// Drive camera from controller when on flat surface level or when jetpacking (so we have free look in space)
+	if (IsUsingFlatGravity() || bJetpackActive)
 	{
 		UpdateCameraForFlatMode();
-	}
-
-	if (bJetpackActive && bJetpackThrustUp)
-	{
-		const FVector Up = (GravityComp && !GravityComp->GetGravityDirection().IsNearlyZero())
-			? GravityComp->GetGravityUp()
-			: FVector::UpVector;
-		AddMovementInput(Up, 1.f);
 	}
 }
 
@@ -182,7 +175,11 @@ void AFederationCharacter::OnMoveForward(const FInputActionValue& Value)
 	if (!Controller) return;
 
 	FVector Dir;
-	if (IsUsingFlatGravity())
+	if (bJetpackActive)
+	{
+		Dir = Controller->GetControlRotation().Vector();
+	}
+	else if (IsUsingFlatGravity())
 	{
 		const FRotator YawRotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
 		Dir = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
@@ -218,7 +215,12 @@ void AFederationCharacter::OnMoveRight(const FInputActionValue& Value)
 	if (!Controller) return;
 
 	FVector Dir;
-	if (IsUsingFlatGravity())
+	if (bJetpackActive)
+	{
+		const FRotator LookRot = Controller->GetControlRotation();
+		Dir = FRotationMatrix(LookRot).GetUnitAxis(EAxis::Y);
+	}
+	else if (IsUsingFlatGravity())
 	{
 		const FRotator YawRotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
 		Dir = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
@@ -252,6 +254,13 @@ void AFederationCharacter::OnLook(const FInputActionValue& Value)
 {
 	FVector2D Look = Value.Get<FVector2D>();
 	if (!Controller) return;
+	// Jetpack in space: camera is driven from controller, so route look to controller
+	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Flying)
+	{
+		AddControllerYawInput(Look.X);
+		AddControllerPitchInput(-Look.Y);
+		return;
+	}
 	if (IsUsingFlatGravity())
 	{
 		AddControllerYawInput(Look.X);
@@ -271,6 +280,11 @@ void AFederationCharacter::OnLookYaw(const FInputActionValue& Value)
 {
 	const float Amount = Value.Get<float>();
 	if (!Controller) return;
+	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Flying)
+	{
+		AddControllerYawInput(Amount);
+		return;
+	}
 	if (IsUsingFlatGravity())
 	{
 		AddControllerYawInput(Amount);
@@ -288,6 +302,11 @@ void AFederationCharacter::OnLookPitch(const FInputActionValue& Value)
 {
 	const float Amount = Value.Get<float>();
 	if (!Controller) return;
+	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Flying)
+	{
+		AddControllerPitchInput(-Amount);
+		return;
+	}
 	if (IsUsingFlatGravity())
 	{
 		AddControllerPitchInput(-Amount);  // Invert pitch so mouse up = look up on surface
@@ -423,14 +442,13 @@ void AFederationCharacter::OnJumpPressed()
 {
 	if (bJetpackActive)
 	{
-		bJetpackThrustUp = true;
+		DeactivateJetpack();
 		return;
 	}
 
-	if (GetCharacterMovement() && GetCharacterMovement()->IsFalling())
+	if (GetCharacterMovement() && !GetCharacterMovement()->IsMovingOnGround())
 	{
 		ActivateJetpack();
-		bJetpackThrustUp = true;
 		return;
 	}
 

@@ -274,4 +274,10 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> CachedPlanetFadeMaterial;
 
 	float CurrentRevealProgress = 0.f;
+
+	/** Seconds since we streamed out (player left surface). Used to avoid immediate re-entry flip-flop. */
+	float TimeSinceStreamOut = 0.f;
+
+	/** Minimum seconds after stream-out before we allow transition back to surface. */
+	static constexpr float StreamOutReentryCooldownSeconds = 1.0f;
 };

@@ -142,6 +142,8 @@ void UPlanetGravityComponent::UpdatePlanetGravity()
 
 void UPlanetGravityComponent::UpdateGravityAlignment(float DeltaTime)
 {
+	UCharacterMovementComponent* CMC = GetOwnerCMC();
+	if (CMC && CMC->MovementMode == MOVE_Flying) return; // Don't align when jetpacking in space
 	if (SurfaceBlendAlpha >= 0.5f) return;
 	if (!bAlignToGravity) return;
 	if (GravityDir.IsNearlyZero()) return;
@@ -189,6 +191,17 @@ void UPlanetGravityComponent::UpdateGravityAlignment(float DeltaTime)
 void UPlanetGravityComponent::UpdateCameraOrientation()
 {
 	if (!FirstPersonCameraRoot) return;
+
+	UCharacterMovementComponent* CMC = GetOwnerCMC();
+	if (CMC && CMC->MovementMode == MOVE_Flying)
+	{
+		// Jetpack in space: let the character/controller drive the camera (no gravity-relative override)
+		if (ThirdPersonSpringArm)
+		{
+			ThirdPersonSpringArm->bUsePawnControlRotation = true;
+		}
+		return;
+	}
 
 	const bool bGravityActive = bUseGravityRelativeLook && bAlignToGravity && !GravityDir.IsNearlyZero() && SurfaceBlendAlpha < 0.5f;
 	if (!bGravityActive)

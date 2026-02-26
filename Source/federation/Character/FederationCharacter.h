@@ -125,8 +125,12 @@ protected:
 	virtual void Landed(const FHitResult& Hit) override;
 
 	bool bJetpackThrustUp = false;
+
+public:
 	void OnJumpPressed();
 	void OnJumpReleased();
+
+protected:
 
 	void SetupFirstPersonView();
 

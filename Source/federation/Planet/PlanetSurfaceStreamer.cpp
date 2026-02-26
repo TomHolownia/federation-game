@@ -3,6 +3,7 @@
 #include "Planet/PlanetSurfaceStreamer.h"
 #include "Planet/PlanetGravityComponent.h"
 #include "Character/FederationCharacter.h"
+#include "Core/FederationGameState.h"
 #include "Engine/LevelStreamingDynamic.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -13,6 +14,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Misc/Paths.h"
 
 namespace
 {
@@ -308,7 +310,10 @@ void UPlanetSurfaceStreamer::SetPlanetFadeAlpha(float Alpha)
 
 bool UPlanetSurfaceStreamer::ShouldStreamOut(const FVector& PlayerLocation, const FVector& SurfaceOrigin) const
 {
-	const float AltitudeAboveSurface = (PlayerLocation - SurfaceOrigin).Size();
+	// Use only vertical (Z) offset so lateral movement over hills doesn't trigger stream-out.
+	// The surface level uses Z-up; distance from origin in X/Y is lateral, not altitude.
+	const FVector Offset = PlayerLocation - SurfaceOrigin;
+	const float AltitudeAboveSurface = Offset.Z;
 	return AltitudeAboveSurface > ExitAltitude;
 }
 
@@ -330,6 +335,11 @@ void UPlanetSurfaceStreamer::GetSavedSpacePosition(FVector& OutLocation, FRotato
 
 void UPlanetSurfaceStreamer::UpdateIdleState()
 {
+	if (AFederationGameState* GS = GetWorld() ? GetWorld()->GetGameState<AFederationGameState>() : nullptr)
+	{
+		GS->DebugStreamingState = TEXT("Idle");
+		GS->DebugStreamingLevelName = FString();
+	}
 	const float DistSq = GetDistanceToPlayerSquared();
 	if (ShouldStreamIn(DistSq))
 	{
@@ -341,7 +351,25 @@ void UPlanetSurfaceStreamer::UpdateLoadingState()
 {
 	if (!StreamedLevel) return;
 
+	TimeSinceStreamOut += GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+
 	const float DistSq = GetDistanceToPlayerSquared();
+	const float Dist = FMath::Sqrt(DistSq);
+	const float HandoffR = GetEffectiveHandoffRadius();
+	// Only show "Loading/Approaching" in dev HUD when we're close; from far away show Deep Space (Idle)
+	if (AFederationGameState* GS = GetWorld() ? GetWorld()->GetGameState<AFederationGameState>() : nullptr)
+	{
+		if (Dist <= HandoffR * 2.f)
+		{
+			GS->DebugStreamingState = TEXT("Loading");
+			GS->DebugStreamingLevelName = FPaths::GetBaseFilename(SurfaceLevelPath);
+		}
+		else
+		{
+			GS->DebugStreamingState = TEXT("Idle");
+			GS->DebugStreamingLevelName = FString();
+		}
+	}
 
 	// If player has moved beyond streaming radius, unload the level.
 	if (!ShouldStreamIn(DistSq))
@@ -356,6 +384,14 @@ void UPlanetSurfaceStreamer::UpdateLoadingState()
 
 	if (!StreamedLevel->HasLoadedLevel()) return;
 
+	// Avoid flip-flop: require cooldown after stream-out before allowing transition back to surface.
+	if (TimeSinceStreamOut < StreamOutReentryCooldownSeconds) return;
+
+	// Don't pull the player onto the surface while they're actively jetpacking (avoids spacebar "toggle planet" effect).
+	// Player must release space (deactivate jetpack) when close to land.
+	AFederationCharacter* FedChar = Cast<AFederationCharacter>(GetPlayerPawn());
+	if (FedChar && FedChar->bJetpackActive) return;
+
 	if (!ShouldTransitionToSurface(DistSq)) return;
 	const bool bFadeActive = FadeStartMultiplier > 0.f;
 	if (bFadeActive && CurrentRevealProgress < HandoffMinRevealProgress) return;
@@ -363,16 +399,24 @@ void UPlanetSurfaceStreamer::UpdateLoadingState()
 
 	TransitionPlayerToSurface();
 	StreamingState = EPlanetStreamingState::OnSurface;
+	if (AFederationGameState* GS = GetWorld() ? GetWorld()->GetGameState<AFederationGameState>() : nullptr)
+	{
+		GS->DebugStreamingState = TEXT("OnSurface");
+		GS->DebugStreamingLevelName = FPaths::GetBaseFilename(SurfaceLevelPath);
+	}
 	OnSurfaceLoaded.Broadcast();
 
-	const float Dist = FMath::Sqrt(DistSq);
-	const float HandoffR = GetEffectiveHandoffRadius();
 	const float StreamR = GetEffectiveStreamingRadius();
 	UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: === HANDOVER === dist=%.0f, handoff=%.0f, streaming=%.0f, reveal=%.2f"), Dist, HandoffR, StreamR, CurrentRevealProgress);
 }
 
 void UPlanetSurfaceStreamer::UpdateOnSurfaceState()
 {
+	if (AFederationGameState* GS = GetWorld() ? GetWorld()->GetGameState<AFederationGameState>() : nullptr)
+	{
+		GS->DebugStreamingState = TEXT("OnSurface");
+		GS->DebugStreamingLevelName = FPaths::GetBaseFilename(SurfaceLevelPath);
+	}
 	APawn* PlayerPawn = GetPlayerPawn();
 	if (!PlayerPawn) return;
 
@@ -395,6 +439,11 @@ void UPlanetSurfaceStreamer::UpdateUnloadingState()
 		ReleaseTransitionLock();
 		StreamedLevel = nullptr;
 		StreamingState = EPlanetStreamingState::Idle;
+		if (AFederationGameState* GS = GetWorld() ? GetWorld()->GetGameState<AFederationGameState>() : nullptr)
+		{
+			GS->DebugStreamingState = TEXT("Idle");
+			GS->DebugStreamingLevelName = FString();
+		}
 		OnSurfaceUnloaded.Broadcast();
 		UE_LOG(LogTemp, Log, TEXT("PlanetSurfaceStreamer: Surface level unloaded, player returned to space."));
 	}
@@ -450,6 +499,8 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 		StreamedLevel->SetShouldBeLoaded(true);
 		StreamedLevel->SetShouldBeVisible(true);
 		StreamingState = EPlanetStreamingState::Loading;
+		TimeSinceStreamOut = StreamOutReentryCooldownSeconds; // Allow immediate transition on first approach.
+		// Game state (Loading/level name) is set in UpdateLoadingState only when close, so HUD shows "Deep Space" when far
 		UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: === STREAM START === level='%s' at surface pos (%.0f, %.0f, %.0f), planet radius=%.0f"), *SurfaceLevelPath, LevelLoadLocation.X, LevelLoadLocation.Y, LevelLoadLocation.Z, PlanetRadius);
 	}
 	else
@@ -542,6 +593,8 @@ void UPlanetSurfaceStreamer::BeginStreamOut()
 {
 	TransitionPlayerToSpace();
 
+	TimeSinceStreamOut = 0.f;
+
 	// Keep the level loaded and visible so the player can see it in deep space
 	// as they fly away. It will be unloaded when they leave streaming range.
 	StreamingState = EPlanetStreamingState::Loading;
@@ -591,6 +644,21 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSpace()
 	if (UPlanetGravityComponent* GravComp = PlayerPawn->FindComponentByClass<UPlanetGravityComponent>())
 	{
 		GravComp->SetSurfaceBlendAlpha(0.f);
+
+		// Seed the gravity-relative view with the preserved look direction so the
+		// first tick doesn't reinitialize from the actor's flat forward vector.
+		const FVector GravUp = GravComp->GetGravityUp();
+		const float YawRad = FMath::DegreesToRadians(PreservedLook.Yaw);
+		FVector FlatForward(FMath::Cos(YawRad), FMath::Sin(YawRad), 0.f);
+		FVector TangentFwd = (FlatForward - FVector::DotProduct(FlatForward, GravUp) * GravUp).GetSafeNormal();
+		if (TangentFwd.IsNearlyZero())
+		{
+			TangentFwd = FVector::CrossProduct(GravUp, FVector::RightVector).GetSafeNormal();
+		}
+		GravComp->ViewTangentForward = TangentFwd;
+		GravComp->ViewUp = GravUp;
+		GravComp->ViewPitchRad = FMath::DegreesToRadians(PreservedLook.Pitch);
+		GravComp->bViewInitialized = true;
 	}
 	ReleaseTransitionLock();
 }
