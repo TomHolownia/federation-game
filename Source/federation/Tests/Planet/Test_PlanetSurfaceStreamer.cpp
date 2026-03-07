@@ -1134,6 +1134,55 @@ bool FPlanetStreamerTangentFrameZAxisDegenerate::RunTest(const FString& Paramete
 }
 
 // ---------------------------------------------------------------------------
+// 33b. Level rotation: MakeFromXY(TangentX, TangentY) has Z aligned with surface normal
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerLevelRotationAlignsUpWithSurfaceNormal,
+	"FederationGame.Planet.PlanetSurfaceStreamer.LevelRotationAlignsUpWithSurfaceNormal",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerLevelRotationAlignsUpWithSurfaceNormal::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const FVector PlanetCenter(0, 0, 0);
+	const float R = 100000.f;
+
+	// North pole: surface at (0, 0, R) → normal (0, 0, 1)
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	Comp->SurfaceLevelWorldOrigin = PlanetCenter + FVector(0, 0, R);
+	Comp->ComputeTangentFrame(PlanetCenter);
+
+	FRotator LevelRotation = FRotationMatrix::MakeFromXY(Comp->TangentX, Comp->TangentY).Rotator();
+	FVector LevelUp = LevelRotation.Quaternion().GetUpVector();
+	TestTrue(TEXT("North pole: level rotation Z should match TangentNormal"),
+		FVector::DotProduct(LevelUp, Comp->TangentNormal) > 0.99f);
+
+	Actor->Destroy();
+
+	// South pole: surface at (0, 0, -R) → normal (0, 0, -1)
+	Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	Comp->SurfaceLevelWorldOrigin = PlanetCenter + FVector(0, 0, -R);
+	Comp->ComputeTangentFrame(PlanetCenter);
+
+	LevelRotation = FRotationMatrix::MakeFromXY(Comp->TangentX, Comp->TangentY).Rotator();
+	LevelUp = LevelRotation.Quaternion().GetUpVector();
+	TestTrue(TEXT("South pole: level rotation Z should match TangentNormal"),
+		FVector::DotProduct(LevelUp, Comp->TangentNormal) > 0.99f);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
 // 34. SpaceToSurface: center mapping
 // ---------------------------------------------------------------------------
 
@@ -1764,6 +1813,65 @@ bool FPlanetStreamerMoveExitReenter::RunTest(const FString& Parameters)
 		SurfaceAfterWalk.Equals(ReenterSurface, 200.f));
 
 	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 50. Forward-priority blend preserves forward direction
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerForwardPriorityBlendPreservesForward,
+	"FederationGame.Planet.PlanetSurfaceStreamer.ForwardPriorityBlendPreservesForward",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerForwardPriorityBlendPreservesForward::RunTest(const FString& Parameters)
+{
+	UPlanetSurfaceStreamer* Comp = NewObject<UPlanetSurfaceStreamer>();
+	if (!Comp) { AddError(TEXT("Failed to create streamer")); return false; }
+
+	const FQuat CurrentView = FRotator(20.f, 70.f, 45.f).Quaternion();
+	const FVector ForwardBefore = CurrentView.GetForwardVector().GetSafeNormal();
+	const FQuat Blended = Comp->ComputeForwardPriorityBlendedViewQuat(CurrentView, FVector::UpVector, 0.6f);
+	const FVector ForwardAfter = Blended.GetForwardVector().GetSafeNormal();
+
+	TestTrue(TEXT("Forward direction should remain unchanged by roll blend"),
+		FVector::DotProduct(ForwardBefore, ForwardAfter) > 0.999f);
+
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 51. Forward-priority blend moves up toward target as alpha increases
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerForwardPriorityBlendMovesUpTowardTarget,
+	"FederationGame.Planet.PlanetSurfaceStreamer.ForwardPriorityBlendMovesUpTowardTarget",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerForwardPriorityBlendMovesUpTowardTarget::RunTest(const FString& Parameters)
+{
+	UPlanetSurfaceStreamer* Comp = NewObject<UPlanetSurfaceStreamer>();
+	if (!Comp) { AddError(TEXT("Failed to create streamer")); return false; }
+
+	const FQuat CurrentView = FRotator(-10.f, 35.f, 90.f).Quaternion();
+	const FVector TargetUp = FVector::UpVector;
+
+	const FQuat BlendLow = Comp->ComputeForwardPriorityBlendedViewQuat(CurrentView, TargetUp, 0.2f);
+	const FQuat BlendHigh = Comp->ComputeForwardPriorityBlendedViewQuat(CurrentView, TargetUp, 0.9f);
+
+	const FVector Forward = CurrentView.GetForwardVector().GetSafeNormal();
+	const FVector UpLow = (BlendLow.GetUpVector().GetSafeNormal() - FVector::DotProduct(BlendLow.GetUpVector().GetSafeNormal(), Forward) * Forward).GetSafeNormal();
+	const FVector UpHigh = (BlendHigh.GetUpVector().GetSafeNormal() - FVector::DotProduct(BlendHigh.GetUpVector().GetSafeNormal(), Forward) * Forward).GetSafeNormal();
+	const FVector TargetUpProjected = (TargetUp - FVector::DotProduct(TargetUp, Forward) * Forward).GetSafeNormal();
+
+	const float DotLow = FVector::DotProduct(UpLow, TargetUpProjected);
+	const float DotHigh = FVector::DotProduct(UpHigh, TargetUpProjected);
+	TestTrue(TEXT("Higher alpha should move up-vector closer to target up"), DotHigh > DotLow);
+
 	return true;
 }
 

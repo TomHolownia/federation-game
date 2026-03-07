@@ -26,5 +26,13 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Dev")
 	FString DebugStreamingLevelName;
 
+	/** Whether the player's jetpack is currently enabled. */
+	UPROPERTY(BlueprintReadOnly, Category = "Dev")
+	bool DebugJetpackEnabled = false;
+
+	/** Whether the player's jetpack boost (C) is currently on. */
+	UPROPERTY(BlueprintReadOnly, Category = "Dev")
+	bool DebugJetpackBoost = false;
+
 	/** Optional: add more dev diagnostics here (e.g. current planet name, FPS). */
 };

@@ -1,6 +1,8 @@
 // Copyright Federation Game. All Rights Reserved.
 
 #include "Character/FederationCharacter.h"
+#include "Core/FederationGameState.h"
+#include "Movement/JetpackMovementComponent.h"
 #include "Planet/PlanetGravityComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -15,6 +17,7 @@
 #include "InputMappingContext.h"
 #include "InputAction.h"
 #include "InputModifiers.h"
+#include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
 
 AFederationCharacter::AFederationCharacter(const FObjectInitializer& ObjectInitializer)
@@ -60,6 +63,7 @@ AFederationCharacter::AFederationCharacter(const FObjectInitializer& ObjectIniti
 
 	// Gravity component owns planet detection, capsule alignment, camera orientation, and ground recovery.
 	GravityComp = CreateDefaultSubobject<UPlanetGravityComponent>(TEXT("PlanetGravity"));
+	JetpackComponent = CreateDefaultSubobject<UJetpackMovementComponent>(TEXT("JetpackMovement"));
 
 	// GroundFriction only applies in Walking mode; FallingLateralFriction (default 0) applies in air.
 	// Do NOT use bUseSeparateBrakingFriction — it overrides falling friction too and kills air velocity.
@@ -85,6 +89,16 @@ void AFederationCharacter::BeginPlay()
 	UpdateActiveCamera();
 	SetupEnhancedInput();
 
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (PC->PlayerCameraManager)
+		{
+			// Space mode wants unconstrained look (no hard +/-89 pitch clamp).
+			PC->PlayerCameraManager->ViewPitchMin = -179.9f;
+			PC->PlayerCameraManager->ViewPitchMax = 179.9f;
+		}
+	}
+
 	if (GravityComp)
 	{
 		GravityComp->SetCameraReferences(FirstPersonCameraRoot, ThirdPersonSpringArm);
@@ -98,6 +112,11 @@ bool AFederationCharacter::IsUsingFlatGravity() const
 		return true;
 	}
 	return GravityComp->GetSurfaceBlendAlpha() >= 0.5f;
+}
+
+bool AFederationCharacter::IsJetpackEnabled() const
+{
+	return JetpackComponent && JetpackComponent->IsJetpackEnabled();
 }
 
 void AFederationCharacter::UpdateCameraForFlatMode()
@@ -114,14 +133,93 @@ void AFederationCharacter::UpdateCameraForFlatMode()
 	}
 }
 
+void AFederationCharacter::InitializeSpaceViewFromCurrent()
+{
+	if (FirstPersonCameraRoot)
+	{
+		SpaceViewQuat = FirstPersonCameraRoot->GetComponentQuat();
+	}
+	else if (Controller)
+	{
+		SpaceViewQuat = Controller->GetControlRotation().Quaternion();
+	}
+	else
+	{
+		SpaceViewQuat = GetActorQuat();
+	}
+	SpaceViewQuat.Normalize();
+	bSpaceViewInitialized = true;
+}
+
+void AFederationCharacter::ApplySpaceLookInput(float YawDegrees, float PitchDegrees, float RollDegrees)
+{
+	if (!bSpaceViewInitialized)
+	{
+		InitializeSpaceViewFromCurrent();
+	}
+
+	if (!FMath::IsNearlyZero(YawDegrees))
+	{
+		const FVector UpAxis = SpaceViewQuat.GetUpVector().GetSafeNormal();
+		SpaceViewQuat = FQuat(UpAxis, FMath::DegreesToRadians(YawDegrees)) * SpaceViewQuat;
+	}
+	if (!FMath::IsNearlyZero(PitchDegrees))
+	{
+		const FVector RightAxis = SpaceViewQuat.GetRightVector().GetSafeNormal();
+		SpaceViewQuat = FQuat(RightAxis, FMath::DegreesToRadians(PitchDegrees)) * SpaceViewQuat;
+	}
+	if (!FMath::IsNearlyZero(RollDegrees))
+	{
+		const FVector ForwardAxis = SpaceViewQuat.GetForwardVector().GetSafeNormal();
+		SpaceViewQuat = FQuat(ForwardAxis, FMath::DegreesToRadians(RollDegrees)) * SpaceViewQuat;
+	}
+	SpaceViewQuat.Normalize();
+}
+
+void AFederationCharacter::UpdateCameraForSpaceMode()
+{
+	if (!bSpaceViewInitialized)
+	{
+		InitializeSpaceViewFromCurrent();
+	}
+
+	if (FirstPersonCameraRoot)
+	{
+		FirstPersonCameraRoot->SetWorldRotation(SpaceViewQuat);
+	}
+	if (ThirdPersonSpringArm)
+	{
+		ThirdPersonSpringArm->bUsePawnControlRotation = false;
+		ThirdPersonSpringArm->SetWorldRotation(SpaceViewQuat);
+	}
+	if (Controller)
+	{
+		Controller->SetControlRotation(SpaceViewQuat.Rotator());
+	}
+}
+
 void AFederationCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	// Drive camera from controller when on flat surface level or when jetpacking (so we have free look in space)
-	if (IsUsingFlatGravity() || bJetpackActive)
+	const bool bIsFalling = GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Falling;
+
+	if (IsJetpackEnabled() || (bIsFalling && !IsUsingFlatGravity()))
+	{
+		UpdateCameraForSpaceMode();
+	}
+	else if (IsUsingFlatGravity())
 	{
 		UpdateCameraForFlatMode();
+		bSpaceViewInitialized = false;
+	}
+
+	bJetpackActive = IsJetpackEnabled();
+
+	if (AFederationGameState* GS = GetWorld() ? GetWorld()->GetGameState<AFederationGameState>() : nullptr)
+	{
+		GS->DebugJetpackEnabled = bJetpackActive;
+		GS->DebugJetpackBoost = bJetpackActive && JetpackComponent && JetpackComponent->IsBoostEnabled();
 	}
 }
 
@@ -132,7 +230,7 @@ void AFederationCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 
 	// Possession (and thus SetupPlayerInputComponent) happens before BeginPlay, so ensure our
 	// runtime-created Enhanced Input actions + IMC exist before we attempt to bind them.
-	if (!DefaultMappingContext || !MoveForwardAction || !MoveRightAction || !JumpAction || !ViewToggleAction ||
+	if (!DefaultMappingContext || !MoveForwardAction || !MoveRightAction || !JumpAction || !ViewToggleAction || !RollAction ||
 		(!LookAction && (!LookYawAction || !LookPitchAction)))
 	{
 		CreateDefaultInputActionsAndContext();
@@ -161,6 +259,14 @@ void AFederationCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		{
 			EIC->BindAction(ViewToggleAction, ETriggerEvent::Started, this, &AFederationCharacter::ToggleViewMode);
 		}
+		if (RollAction)
+		{
+			EIC->BindAction(RollAction, ETriggerEvent::Triggered, this, &AFederationCharacter::OnRoll);
+		}
+		if (JetpackBoostAction)
+		{
+			EIC->BindAction(JetpackBoostAction, ETriggerEvent::Started, this, &AFederationCharacter::OnJetpackBoostPressed);
+		}
 	}
 	else if (PlayerInputComponent)
 	{
@@ -175,9 +281,9 @@ void AFederationCharacter::OnMoveForward(const FInputActionValue& Value)
 	if (!Controller) return;
 
 	FVector Dir;
-	if (bJetpackActive)
+	if (IsJetpackEnabled())
 	{
-		Dir = Controller->GetControlRotation().Vector();
+		Dir = FirstPersonCameraRoot ? FirstPersonCameraRoot->GetForwardVector() : Controller->GetControlRotation().Vector();
 	}
 	else if (IsUsingFlatGravity())
 	{
@@ -215,10 +321,9 @@ void AFederationCharacter::OnMoveRight(const FInputActionValue& Value)
 	if (!Controller) return;
 
 	FVector Dir;
-	if (bJetpackActive)
+	if (IsJetpackEnabled())
 	{
-		const FRotator LookRot = Controller->GetControlRotation();
-		Dir = FRotationMatrix(LookRot).GetUnitAxis(EAxis::Y);
+		Dir = FirstPersonCameraRoot ? FirstPersonCameraRoot->GetRightVector() : FRotationMatrix(Controller->GetControlRotation()).GetUnitAxis(EAxis::Y);
 	}
 	else if (IsUsingFlatGravity())
 	{
@@ -257,9 +362,16 @@ void AFederationCharacter::OnLook(const FInputActionValue& Value)
 	// Jetpack in space: camera is driven from controller, so route look to controller
 	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Flying)
 	{
-		AddControllerYawInput(Look.X);
-		AddControllerPitchInput(-Look.Y);
+		ApplySpaceLookInput(Look.X, -Look.Y);
 		return;
+	}
+	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Falling)
+	{
+		if (!IsUsingFlatGravity())
+		{
+			ApplySpaceLookInput(Look.X, -Look.Y);
+			return;
+		}
 	}
 	if (IsUsingFlatGravity())
 	{
@@ -282,8 +394,16 @@ void AFederationCharacter::OnLookYaw(const FInputActionValue& Value)
 	if (!Controller) return;
 	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Flying)
 	{
-		AddControllerYawInput(Amount);
+		ApplySpaceLookInput(Amount, 0.f);
 		return;
+	}
+	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Falling)
+	{
+		if (!IsUsingFlatGravity())
+		{
+			ApplySpaceLookInput(Amount, 0.f);
+			return;
+		}
 	}
 	if (IsUsingFlatGravity())
 	{
@@ -304,8 +424,16 @@ void AFederationCharacter::OnLookPitch(const FInputActionValue& Value)
 	if (!Controller) return;
 	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Flying)
 	{
-		AddControllerPitchInput(-Amount);
+		ApplySpaceLookInput(0.f, -Amount);
 		return;
+	}
+	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Falling)
+	{
+		if (!IsUsingFlatGravity())
+		{
+			ApplySpaceLookInput(0.f, -Amount);
+			return;
+		}
 	}
 	if (IsUsingFlatGravity())
 	{
@@ -320,6 +448,19 @@ void AFederationCharacter::OnLookPitch(const FInputActionValue& Value)
 	AddControllerPitchInput(Amount);
 }
 
+void AFederationCharacter::OnRoll(const FInputActionValue& Value)
+{
+	const float Amount = Value.Get<float>();
+	if (!Controller) return;
+
+	const bool bSpaceLike = IsJetpackEnabled()
+		|| ((GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Falling) && !IsUsingFlatGravity());
+	if (!bSpaceLike) return;
+
+	const float DeltaSeconds = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+	ApplySpaceLookInput(0.f, 0.f, Amount * SpaceRollSpeedDegrees * DeltaSeconds);
+}
+
 void AFederationCharacter::SetupEnhancedInput()
 {
 	APlayerController* PC = Cast<APlayerController>(GetController());
@@ -328,7 +469,7 @@ void AFederationCharacter::SetupEnhancedInput()
 	UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer());
 	if (!Subsystem) return;
 
-	if (!DefaultMappingContext || !MoveForwardAction || !MoveRightAction || !JumpAction ||
+	if (!DefaultMappingContext || !MoveForwardAction || !MoveRightAction || !JumpAction || !RollAction ||
 		(!LookAction && (!LookYawAction || !LookPitchAction)))
 	{
 		CreateDefaultInputActionsAndContext();
@@ -373,6 +514,16 @@ void AFederationCharacter::CreateDefaultInputActionsAndContext()
 		ViewToggleAction = NewObject<UInputAction>(this, FName(TEXT("IA_ViewToggle_Default")));
 		ViewToggleAction->ValueType = EInputActionValueType::Boolean;
 	}
+	if (!RollAction)
+	{
+		RollAction = NewObject<UInputAction>(this, FName(TEXT("IA_Roll_Default")));
+		RollAction->ValueType = EInputActionValueType::Axis1D;
+	}
+	if (!JetpackBoostAction)
+	{
+		JetpackBoostAction = NewObject<UInputAction>(this, FName(TEXT("IA_JetpackBoost_Default")));
+		JetpackBoostAction->ValueType = EInputActionValueType::Boolean;
+	}
 
 	if (DefaultMappingContext) return;
 
@@ -388,6 +539,10 @@ void AFederationCharacter::CreateDefaultInputActionsAndContext()
 	IMC->MapKey(LookPitchAction, EKeys::MouseY);
 	IMC->MapKey(JumpAction, EKeys::SpaceBar);
 	IMC->MapKey(ViewToggleAction, EKeys::V);
+	IMC->MapKey(RollAction, EKeys::Q);
+	FEnhancedActionKeyMapping& E = IMC->MapKey(RollAction, EKeys::E);
+	E.Modifiers.Add(NewObject<UInputModifierNegate>(this));
+	IMC->MapKey(JetpackBoostAction, EKeys::C);
 
 	DefaultMappingContext = IMC;
 }
@@ -440,7 +595,7 @@ void AFederationCharacter::SetThirdPersonView(bool bThirdPerson)
 
 void AFederationCharacter::OnJumpPressed()
 {
-	if (bJetpackActive)
+	if (IsJetpackEnabled())
 	{
 		DeactivateJetpack();
 		return;
@@ -461,24 +616,33 @@ void AFederationCharacter::OnJumpReleased()
 	bJetpackThrustUp = false;
 }
 
+void AFederationCharacter::OnJetpackBoostPressed()
+{
+	if (JetpackComponent && IsJetpackEnabled())
+	{
+		JetpackComponent->SetBoostEnabled(!JetpackComponent->IsBoostEnabled());
+	}
+}
+
 void AFederationCharacter::ActivateJetpack()
 {
-	bJetpackActive = true;
-	if (GetCharacterMovement())
+	if (JetpackComponent)
 	{
-		GetCharacterMovement()->SetMovementMode(MOVE_Flying);
-		GetCharacterMovement()->MaxFlySpeed = MaxJetpackSpeed;
+		JetpackComponent->ActivateJetpack();
 	}
+	InitializeSpaceViewFromCurrent();
+	bJetpackActive = IsJetpackEnabled();
 }
 
 void AFederationCharacter::DeactivateJetpack()
 {
-	bJetpackActive = false;
 	bJetpackThrustUp = false;
-	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Flying)
+	if (JetpackComponent)
 	{
-		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+		JetpackComponent->DeactivateJetpack();
 	}
+	bSpaceViewInitialized = false;
+	bJetpackActive = IsJetpackEnabled();
 }
 
 void AFederationCharacter::Landed(const FHitResult& Hit)

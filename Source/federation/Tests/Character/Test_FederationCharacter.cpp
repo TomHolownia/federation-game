@@ -2,6 +2,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "Character/FederationCharacter.h"
+#include "Movement/JetpackMovementComponent.h"
 #include "Planet/PlanetGravityComponent.h"
 #include "Engine/World.h"
 #include "Tests/AutomationCommon.h"
@@ -383,7 +384,8 @@ bool FFederationCharacterJetpackActivatesWhenFalling::RunTest(const FString& Par
 
 	Character->ActivateJetpack();
 
-	TestTrue(TEXT("bJetpackActive should be true"), Character->bJetpackActive);
+	TestTrue(TEXT("Jetpack should report enabled"), Character->IsJetpackEnabled());
+	TestTrue(TEXT("Legacy jetpack bool should mirror component state"), Character->bJetpackActive);
 	TestTrue(TEXT("Movement mode should be Flying"),
 		Character->GetCharacterMovement()->MovementMode == MOVE_Flying);
 
@@ -406,10 +408,10 @@ bool FFederationCharacterJetpackDeactivatesOnLanded::RunTest(const FString& Para
 	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
 
 	Character->ActivateJetpack();
-	TestTrue(TEXT("Jetpack should be active"), Character->bJetpackActive);
+	TestTrue(TEXT("Jetpack should be active"), Character->IsJetpackEnabled());
 
 	Character->DeactivateJetpack();
-	TestFalse(TEXT("bJetpackActive should be false after deactivation"), Character->bJetpackActive);
+	TestFalse(TEXT("Jetpack should be disabled after deactivation"), Character->IsJetpackEnabled());
 	TestTrue(TEXT("Movement mode should be Falling after deactivation"),
 		Character->GetCharacterMovement()->MovementMode == MOVE_Falling);
 
@@ -432,8 +434,8 @@ bool FFederationCharacterJetpackSetsMaxFlySpeed::RunTest(const FString& Paramete
 	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
 
 	Character->ActivateJetpack();
-	TestEqual(TEXT("MaxFlySpeed should match MaxJetpackSpeed"),
-		Character->GetCharacterMovement()->MaxFlySpeed, Character->MaxJetpackSpeed);
+	TestEqual(TEXT("MaxFlySpeed should match JetpackComponent MaxJetpackSpeed"),
+		Character->GetCharacterMovement()->MaxFlySpeed, Character->JetpackComponent->MaxJetpackSpeed);
 
 	Character->Destroy();
 	return true;
@@ -457,7 +459,7 @@ bool FFederationCharacterJetpackDoesNotActivateOnGround::RunTest(const FString& 
 	TestFalse(TEXT("Character should not be falling"), Character->GetCharacterMovement()->IsFalling());
 
 	Character->OnJumpPressed();
-	TestFalse(TEXT("Jetpack should NOT activate from ground"), Character->bJetpackActive);
+	TestFalse(TEXT("Jetpack should NOT activate from ground"), Character->IsJetpackEnabled());
 
 	Character->Destroy();
 	return true;

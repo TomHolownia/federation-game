@@ -10,6 +10,25 @@ class ULevelStreamingDynamic;
 class UPlanetGravityComponent;
 class UStaticMeshComponent;
 class UMaterialInstanceDynamic;
+class USceneComponent;
+
+USTRUCT(BlueprintType)
+struct FPlanetTransitionOrientation
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Transition")
+	bool bIsValid = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Transition")
+	FQuat ViewQuat = FQuat::Identity;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Transition")
+	FVector Forward = FVector::ForwardVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Transition")
+	FVector Up = FVector::UpVector;
+};
 
 UENUM(BlueprintType)
 enum class EPlanetStreamingState : uint8
@@ -106,6 +125,14 @@ public:
 	/** Long package name of the surface level to stream, e.g. "/Game/Planets/PlanetSurface_Test". */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
 	FString SurfaceLevelPath;
+
+	/**
+	 * Scale applied to the streamed surface level.
+	 * 1.0 = native level size. Reduce if the level extends beyond the planet sphere.
+	 * Each planet can override this in the Details panel.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming", meta = (ClampMin = "0.001", ClampMax = "10.0"))
+	float SurfaceLevelScaleMultiplier = 1.0f;
 
 	/** Distance from planet center at which streaming begins. Should be greater than the planet's visual radius (e.g. SmallPlanet PlanetRadius 100000 → sphere radius 100000; use StreamingRadius 200000 so load starts while approaching). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
@@ -239,6 +266,7 @@ public:
 	bool bOwnsTransitionLock = false;
 
 	FVector SurfaceLevelWorldOrigin = FVector::ZeroVector;
+	FPlanetTransitionOrientation LastTransitionOrientation;
 
 	FVector TangentNormal = FVector::UpVector;
 	FVector TangentX = FVector::ForwardVector;
@@ -247,6 +275,9 @@ public:
 	void ComputeTangentFrame(const FVector& PlanetCenter);
 	FVector SpaceToSurfacePosition(const FVector& SpacePos) const;
 	FVector SurfaceToSpacePosition(const FVector& SurfacePos) const;
+	FPlanetTransitionOrientation CaptureCurrentViewOrientation() const;
+	FQuat ComputeForwardPriorityBlendedViewQuat(const FQuat& CurrentView, const FVector& TargetUp, float BlendAlpha) const;
+	void ApplyAtmosphereRollBlend(float BlendAlpha);
 
 private:
 	UPROPERTY()
@@ -277,6 +308,9 @@ private:
 
 	/** Seconds since we streamed out (player left surface). Used to avoid immediate re-entry flip-flop. */
 	float TimeSinceStreamOut = 0.f;
+
+	/** World time when we entered Loading state; used for load timeout. */
+	float LoadingStartTime = 0.f;
 
 	/** Minimum seconds after stream-out before we allow transition back to surface. */
 	static constexpr float StreamOutReentryCooldownSeconds = 1.0f;

@@ -4,7 +4,10 @@
 #include "Planet/PlanetGravityComponent.h"
 #include "Character/FederationCharacter.h"
 #include "Core/FederationGameState.h"
+#include "Movement/JetpackMovementComponent.h"
 #include "Engine/LevelStreamingDynamic.h"
+#include "Engine/World.h"
+#include "UObject/SoftObjectPath.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -12,7 +15,6 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/Paths.h"
 
@@ -335,6 +337,15 @@ void UPlanetSurfaceStreamer::GetSavedSpacePosition(FVector& OutLocation, FRotato
 
 void UPlanetSurfaceStreamer::UpdateIdleState()
 {
+	APawn* PlayerPawn = GetPlayerPawn();
+	if (PlayerPawn)
+	{
+		if (UPlanetGravityComponent* GravComp = PlayerPawn->FindComponentByClass<UPlanetGravityComponent>())
+		{
+			GravComp->SetSurfaceBlendAlpha(0.f);
+		}
+	}
+
 	if (AFederationGameState* GS = GetWorld() ? GetWorld()->GetGameState<AFederationGameState>() : nullptr)
 	{
 		GS->DebugStreamingState = TEXT("Idle");
@@ -356,6 +367,24 @@ void UPlanetSurfaceStreamer::UpdateLoadingState()
 	const float DistSq = GetDistanceToPlayerSquared();
 	const float Dist = FMath::Sqrt(DistSq);
 	const float HandoffR = GetEffectiveHandoffRadius();
+	const float StreamR = GetEffectiveStreamingRadius();
+
+	APawn* PlayerPawn = GetPlayerPawn();
+	if (PlayerPawn)
+	{
+		if (UPlanetGravityComponent* GravComp = PlayerPawn->FindComponentByClass<UPlanetGravityComponent>())
+		{
+			float BlendAlpha = 0.f;
+			if (StreamR > HandoffR + KINDA_SMALL_NUMBER)
+			{
+				const float Normalized = (StreamR - Dist) / (StreamR - HandoffR);
+				BlendAlpha = FMath::Clamp(Normalized, 0.f, 1.f);
+			}
+			GravComp->SetSurfaceBlendAlpha(BlendAlpha);
+			ApplyAtmosphereRollBlend(BlendAlpha);
+		}
+	}
+
 	// Only show "Loading/Approaching" in dev HUD when we're close; from far away show Deep Space (Idle)
 	if (AFederationGameState* GS = GetWorld() ? GetWorld()->GetGameState<AFederationGameState>() : nullptr)
 	{
@@ -371,26 +400,45 @@ void UPlanetSurfaceStreamer::UpdateLoadingState()
 		}
 	}
 
-	// If player has moved beyond streaming radius, unload the level.
+	// If player has moved beyond streaming radius, unload only once the level has finished loading.
+	// Do not cancel an in-progress load: let it complete so we can transition if they re-enter range,
+	// and avoid the "flash then level never appears" when the player is near the boundary.
 	if (!ShouldStreamIn(DistSq))
 	{
-		StreamedLevel->SetShouldBeLoaded(false);
-		StreamedLevel->SetShouldBeVisible(false);
-		StreamedLevel->SetIsRequestingUnloadAndRemoval(true);
-		StreamingState = EPlanetStreamingState::Unloading;
-		UE_LOG(LogTemp, Log, TEXT("PlanetSurfaceStreamer: Player left streaming range, unloading level."));
+		if (StreamedLevel->HasLoadedLevel())
+		{
+			StreamedLevel->SetShouldBeLoaded(false);
+			StreamedLevel->SetShouldBeVisible(false);
+			StreamedLevel->SetIsRequestingUnloadAndRemoval(true);
+			StreamingState = EPlanetStreamingState::Unloading;
+			UE_LOG(LogTemp, Log, TEXT("PlanetSurfaceStreamer: Player left streaming range, unloading level."));
+		}
 		return;
 	}
 
-	if (!StreamedLevel->HasLoadedLevel()) return;
+	if (!StreamedLevel->HasLoadedLevel())
+	{
+		// After hot reload, LoadingStartTime can be 0 on existing instances; avoid immediate false timeout.
+		if (GetWorld() && LoadingStartTime <= 0.f)
+		{
+			LoadingStartTime = GetWorld()->GetTimeSeconds();
+		}
+		// Timeout: if the level never loads (e.g. bad path), leave Loading and go back to Idle so we can retry.
+		const float LoadTimeout = 15.f;
+		if (GetWorld() && (GetWorld()->GetTimeSeconds() - LoadingStartTime > LoadTimeout))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: Level load timeout after %.0fs, unloading. Check SurfaceLevelPath='%s'."), LoadTimeout, *SurfaceLevelPath);
+			StreamedLevel->SetShouldBeLoaded(false);
+			StreamedLevel->SetShouldBeVisible(false);
+			StreamedLevel->SetIsRequestingUnloadAndRemoval(true);
+			StreamedLevel = nullptr;
+			StreamingState = EPlanetStreamingState::Idle;
+		}
+		return;
+	}
 
 	// Avoid flip-flop: require cooldown after stream-out before allowing transition back to surface.
 	if (TimeSinceStreamOut < StreamOutReentryCooldownSeconds) return;
-
-	// Don't pull the player onto the surface while they're actively jetpacking (avoids spacebar "toggle planet" effect).
-	// Player must release space (deactivate jetpack) when close to land.
-	AFederationCharacter* FedChar = Cast<AFederationCharacter>(GetPlayerPawn());
-	if (FedChar && FedChar->bJetpackActive) return;
 
 	if (!ShouldTransitionToSurface(DistSq)) return;
 	const bool bFadeActive = FadeStartMultiplier > 0.f;
@@ -406,7 +454,6 @@ void UPlanetSurfaceStreamer::UpdateLoadingState()
 	}
 	OnSurfaceLoaded.Broadcast();
 
-	const float StreamR = GetEffectiveStreamingRadius();
 	UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: === HANDOVER === dist=%.0f, handoff=%.0f, streaming=%.0f, reveal=%.2f"), Dist, HandoffR, StreamR, CurrentRevealProgress);
 }
 
@@ -485,12 +532,20 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 	SurfaceLevelWorldOrigin = LevelLoadLocation;
 	ComputeTangentFrame(PlanetCenter);
 
+	// Orient the streamed level so its local Z (up) matches the planet surface normal at this
+	// approach point. This allows correct north-pole / south-pole / equator streaming: fly in
+	// at any point and the level loads with horizon aligned to that patch.
+	const FRotator LevelRotation = FRotationMatrix::MakeFromXY(TangentX, TangentY).Rotator();
+	const FVector Scale3D(SurfaceLevelScaleMultiplier);
+	const FTransform LevelTransform(FQuat(LevelRotation), LevelLoadLocation, Scale3D);
+
+	const FSoftObjectPath LevelPath(SurfaceLevelPath);
+	TSoftObjectPtr<UWorld> LevelPtr{ LevelPath };
 	bool bSuccess = false;
-	StreamedLevel = ULevelStreamingDynamic::LoadLevelInstance(
-		World,
-		SurfaceLevelPath,
-		LevelLoadLocation,
-		FRotator::ZeroRotator,
+	StreamedLevel = ULevelStreamingDynamic::LoadLevelInstanceBySoftObjectPtr(
+		this,
+		LevelPtr,
+		LevelTransform,
 		bSuccess
 	);
 
@@ -500,8 +555,9 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 		StreamedLevel->SetShouldBeVisible(true);
 		StreamingState = EPlanetStreamingState::Loading;
 		TimeSinceStreamOut = StreamOutReentryCooldownSeconds; // Allow immediate transition on first approach.
+		LoadingStartTime = World ? World->GetTimeSeconds() : 0.f;
 		// Game state (Loading/level name) is set in UpdateLoadingState only when close, so HUD shows "Deep Space" when far
-		UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: === STREAM START === level='%s' at surface pos (%.0f, %.0f, %.0f), planet radius=%.0f"), *SurfaceLevelPath, LevelLoadLocation.X, LevelLoadLocation.Y, LevelLoadLocation.Z, PlanetRadius);
+		UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: === STREAM START === level='%s' at surface pos (%.0f, %.0f, %.0f), planet radius=%.0f, scale=%.3f"), *SurfaceLevelPath, LevelLoadLocation.X, LevelLoadLocation.Y, LevelLoadLocation.Z, PlanetRadius, SurfaceLevelScaleMultiplier);
 	}
 	else
 	{
@@ -521,51 +577,58 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSurface()
 	UPlanetGravityComponent* GravComp = PlayerPawn->FindComponentByClass<UPlanetGravityComponent>();
 	APlayerController* PC = Char ? Cast<APlayerController>(Char->GetController()) : nullptr;
 
-	// --- 1. Capture current look direction before any state changes ---
-	FRotator PreservedLook = FRotator::ZeroRotator;
-	if (GravComp && GravComp->IsGravityViewInitialized())
+	// --- 1. Capture full world-space view orientation before any state changes ---
+	LastTransitionOrientation = CaptureCurrentViewOrientation();
+
+	// --- 2. Recompute surface origin and tangent frame for the player's actual approach
+	// angle at handoff, not where they were when streaming started. Without this the
+	// player can spawn far from the level center and immediately trigger stream-out.
+	const FVector PlanetCenter = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
+	const float PlanetRadius = GetPlanetRadiusFromOwner();
+	if (PlanetRadius > 0.f)
 	{
-		const FVector Up = GravComp->GetGravityUp();
-		const FVector Fwd = GravComp->GetViewTangentForward();
-		const float Pitch = FMath::RadiansToDegrees(GravComp->GetViewPitchRad());
-		const float Yaw = FMath::Atan2(Fwd.Y, Fwd.X) * (180.f / PI);
-		PreservedLook = FRotator(FMath::ClampAngle(Pitch, -85.f, 85.f), Yaw, 0.f);
-	}
-	else if (PC)
-	{
-		const FRotator CR = PC->GetControlRotation();
-		PreservedLook = FRotator(FMath::ClampAngle(CR.Pitch, -85.f, 85.f), CR.Yaw, 0.f);
+		const FVector ToPlayer = (PlayerPawn->GetActorLocation() - PlanetCenter).GetSafeNormal();
+		SurfaceLevelWorldOrigin = PlanetCenter + ToPlayer * PlanetRadius;
+		ComputeTangentFrame(PlanetCenter);
 	}
 
-	// --- 2. Capture incoming velocity ---
+	// --- 3. Capture incoming velocity ---
 	const FVector IncomingVelocity = PlayerPawn->GetVelocity();
 
-	// --- 3. Position player on surface level (altitude mirrors space distance) ---
+	// --- 4. Position player on surface level (altitude mirrors space distance) ---
 	PlayerPawn->SetActorLocation(SpaceToSurfacePosition(PlayerPawn->GetActorLocation()));
-	if (Char)
-	{
-		Char->SetActorRotation(FRotator(0.f, PreservedLook.Yaw, 0.f));
-	}
 
-	// --- 4. Hide planet shell (should already be nearly invisible from fade) ---
+	// --- 5. Hide planet shell (should already be nearly invisible from fade) ---
 	if (Owner)
 	{
 		Owner->SetActorHiddenInGame(true);
 		Owner->SetActorEnableCollision(false);
 	}
 
-	// --- 5. Switch to flat gravity + preserve velocity ---
+	// --- 6. Switch to flat gravity + preserve velocity ---
 	if (Char && Char->GetCharacterMovement())
 	{
 		Char->GetCharacterMovement()->SetGravityDirection(FVector::DownVector);
+		// On streamed surface levels we want standard Earth-like falling behavior.
+		Char->GetCharacterMovement()->GravityScale = 1.f;
 		const float DownSpeed = FMath::Max(0.f, -IncomingVelocity.Z);
 		Char->GetCharacterMovement()->Velocity = FVector(IncomingVelocity.X, IncomingVelocity.Y, -DownSpeed);
 	}
 
-	// --- 6. Set camera to preserved look direction ---
+	// --- 7. Preserve forward exactly, blend roll to local horizon at handoff ---
+	FQuat SurfaceViewQuat = LastTransitionOrientation.bIsValid
+		? ComputeForwardPriorityBlendedViewQuat(LastTransitionOrientation.ViewQuat, FVector::UpVector, 1.f)
+		: FQuat::Identity;
+
+	if (!LastTransitionOrientation.bIsValid && PC)
+	{
+		SurfaceViewQuat = PC->GetControlRotation().Quaternion();
+	}
+
+	const FRotator SurfaceControlRotation = SurfaceViewQuat.Rotator();
 	if (FedChar && FedChar->FirstPersonCameraRoot)
 	{
-		FedChar->FirstPersonCameraRoot->SetWorldRotation(PreservedLook);
+		FedChar->FirstPersonCameraRoot->SetWorldRotation(SurfaceViewQuat);
 		FedChar->FirstPersonCameraRoot->SetRelativeRotation(FRotator::ZeroRotator);
 	}
 
@@ -573,13 +636,15 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSurface()
 	{
 		Char->bUseControllerRotationYaw = true;
 		Char->bUseControllerRotationPitch = true;
+		Char->bUseControllerRotationRoll = true;
+		Char->SetActorRotation(SurfaceViewQuat);
 	}
 	if (PC)
 	{
-		PC->SetControlRotation(PreservedLook);
+		PC->SetControlRotation(SurfaceControlRotation);
 	}
 
-	// --- 7. Reset gravity component to flat-world state ---
+	// --- 8. Reset gravity component to flat-world state ---
 	if (GravComp)
 	{
 		GravComp->GravityDir = FVector::DownVector;
@@ -610,13 +675,8 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSpace()
 	ACharacter* Char = Cast<ACharacter>(PlayerPawn);
 	APlayerController* PC = Char ? Cast<APlayerController>(Char->GetController()) : nullptr;
 
-	// --- 1. Capture current look direction before any state changes ---
-	FRotator PreservedLook = FRotator::ZeroRotator;
-	if (PC)
-	{
-		const FRotator CR = PC->GetControlRotation();
-		PreservedLook = FRotator(FMath::ClampAngle(CR.Pitch, -85.f, 85.f), CR.Yaw, 0.f);
-	}
+	// --- 1. Capture current full view orientation before any state changes ---
+	LastTransitionOrientation = CaptureCurrentViewOrientation();
 
 	// --- 2. Show the planet sphere again ---
 	if (Owner)
@@ -631,12 +691,14 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSpace()
 	// --- 3. Place player at matching distance from planet surface ---
 	PlayerPawn->SetActorLocation(SurfaceToSpacePosition(PlayerPawn->GetActorLocation()));
 
-	// --- 4. Restore gravity-relative look with preserved direction ---
+	// --- 4. Restore gravity-relative look with preserved forward direction ---
 	if (Char)
 	{
-		Char->SetActorRotation(FRotator(0.f, PreservedLook.Yaw, 0.f));
+		const FQuat RestoredViewQuat = LastTransitionOrientation.bIsValid ? LastTransitionOrientation.ViewQuat : Char->GetActorQuat();
+		Char->SetActorRotation(RestoredViewQuat);
 		Char->bUseControllerRotationYaw = false;
 		Char->bUseControllerRotationPitch = false;
+		Char->bUseControllerRotationRoll = false;
 	}
 
 	SetPlayerGravityComponentActive(true);
@@ -645,20 +707,24 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSpace()
 	{
 		GravComp->SetSurfaceBlendAlpha(0.f);
 
-		// Seed the gravity-relative view with the preserved look direction so the
-		// first tick doesn't reinitialize from the actor's flat forward vector.
 		const FVector GravUp = GravComp->GetGravityUp();
-		const float YawRad = FMath::DegreesToRadians(PreservedLook.Yaw);
-		FVector FlatForward(FMath::Cos(YawRad), FMath::Sin(YawRad), 0.f);
-		FVector TangentFwd = (FlatForward - FVector::DotProduct(FlatForward, GravUp) * GravUp).GetSafeNormal();
+		const FVector PreservedForward = LastTransitionOrientation.bIsValid
+			? LastTransitionOrientation.Forward
+			: (PC ? PC->GetControlRotation().Vector() : PlayerPawn->GetActorForwardVector());
+		FVector TangentFwd = (PreservedForward - FVector::DotProduct(PreservedForward, GravUp) * GravUp).GetSafeNormal();
 		if (TangentFwd.IsNearlyZero())
 		{
 			TangentFwd = FVector::CrossProduct(GravUp, FVector::RightVector).GetSafeNormal();
 		}
 		GravComp->ViewTangentForward = TangentFwd;
 		GravComp->ViewUp = GravUp;
-		GravComp->ViewPitchRad = FMath::DegreesToRadians(PreservedLook.Pitch);
+		GravComp->ViewPitchRad = FMath::Asin(FMath::Clamp(FVector::DotProduct(PreservedForward.GetSafeNormal(), GravUp), -1.f, 1.f));
 		GravComp->bViewInitialized = true;
+	}
+
+	if (PC && LastTransitionOrientation.bIsValid)
+	{
+		PC->SetControlRotation(LastTransitionOrientation.ViewQuat.Rotator());
 	}
 	ReleaseTransitionLock();
 }
@@ -722,6 +788,97 @@ FVector UPlanetSurfaceStreamer::SurfaceToSpacePosition(const FVector& SurfacePos
 	Dir = Dir.GetSafeNormal();
 
 	return PlanetCenter + Dir * (R + FMath::Max(0.f, Altitude));
+}
+
+FPlanetTransitionOrientation UPlanetSurfaceStreamer::CaptureCurrentViewOrientation() const
+{
+	FPlanetTransitionOrientation Orientation;
+
+	APawn* PlayerPawn = GetPlayerPawn();
+	if (!PlayerPawn)
+	{
+		return Orientation;
+	}
+
+	FQuat ViewQuat = PlayerPawn->GetActorQuat();
+	if (const AFederationCharacter* FedChar = Cast<AFederationCharacter>(PlayerPawn))
+	{
+		if (FedChar->FirstPersonCameraRoot)
+		{
+			ViewQuat = FedChar->FirstPersonCameraRoot->GetComponentQuat();
+		}
+		else if (const APlayerController* PC = Cast<APlayerController>(FedChar->GetController()))
+		{
+			ViewQuat = PC->GetControlRotation().Quaternion();
+		}
+	}
+	else if (const APlayerController* PC = Cast<APlayerController>(PlayerPawn->GetController()))
+	{
+		ViewQuat = PC->GetControlRotation().Quaternion();
+	}
+
+	Orientation.ViewQuat = ViewQuat;
+	Orientation.Forward = ViewQuat.GetForwardVector().GetSafeNormal();
+	Orientation.Up = ViewQuat.GetUpVector().GetSafeNormal();
+	Orientation.bIsValid = !Orientation.Forward.IsNearlyZero() && !Orientation.Up.IsNearlyZero();
+	return Orientation;
+}
+
+FQuat UPlanetSurfaceStreamer::ComputeForwardPriorityBlendedViewQuat(const FQuat& CurrentView, const FVector& TargetUp, float BlendAlpha) const
+{
+	const float Alpha = FMath::Clamp(BlendAlpha, 0.f, 1.f);
+	const FVector Forward = CurrentView.GetForwardVector().GetSafeNormal();
+	if (Forward.IsNearlyZero())
+	{
+		return CurrentView;
+	}
+
+	FVector CurrentUp = CurrentView.GetUpVector().GetSafeNormal();
+	FVector SourceUp = (CurrentUp - FVector::DotProduct(CurrentUp, Forward) * Forward).GetSafeNormal();
+	if (SourceUp.IsNearlyZero())
+	{
+		SourceUp = FVector::UpVector;
+		if (FMath::Abs(FVector::DotProduct(SourceUp, Forward)) > 0.95f)
+		{
+			SourceUp = FVector::RightVector;
+		}
+		SourceUp = (SourceUp - FVector::DotProduct(SourceUp, Forward) * Forward).GetSafeNormal();
+	}
+
+	FVector DesiredUp = (TargetUp.GetSafeNormal() - FVector::DotProduct(TargetUp.GetSafeNormal(), Forward) * Forward).GetSafeNormal();
+	if (DesiredUp.IsNearlyZero())
+	{
+		DesiredUp = SourceUp;
+	}
+
+	const FQuat Delta = FQuat::FindBetweenNormals(SourceUp, DesiredUp);
+	const FQuat RollBlendQuat = FQuat::Slerp(FQuat::Identity, Delta, Alpha);
+	const FVector BlendedUp = RollBlendQuat.RotateVector(SourceUp).GetSafeNormal();
+
+	return FRotationMatrix::MakeFromXZ(Forward, BlendedUp).ToQuat();
+}
+
+void UPlanetSurfaceStreamer::ApplyAtmosphereRollBlend(float BlendAlpha)
+{
+	APawn* PlayerPawn = GetPlayerPawn();
+	AFederationCharacter* FedChar = Cast<AFederationCharacter>(PlayerPawn);
+	APlayerController* PC = FedChar ? Cast<APlayerController>(FedChar->GetController()) : nullptr;
+	if (!FedChar || !PC || !FedChar->JetpackComponent || !FedChar->JetpackComponent->IsJetpackEnabled())
+	{
+		return;
+	}
+
+	UPlanetGravityComponent* GravComp = FedChar->FindComponentByClass<UPlanetGravityComponent>();
+	if (!GravComp)
+	{
+		return;
+	}
+
+	const FQuat CurrentViewQuat = FedChar->FirstPersonCameraRoot
+		? FedChar->FirstPersonCameraRoot->GetComponentQuat()
+		: PC->GetControlRotation().Quaternion();
+	const FQuat BlendedQuat = ComputeForwardPriorityBlendedViewQuat(CurrentViewQuat, GravComp->GetGravityUp(), BlendAlpha);
+	PC->SetControlRotation(BlendedQuat.Rotator());
 }
 
 APawn* UPlanetSurfaceStreamer::GetPlayerPawn() const

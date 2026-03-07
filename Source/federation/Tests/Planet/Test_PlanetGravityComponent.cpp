@@ -2,6 +2,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "Planet/PlanetGravityComponent.h"
+#include "Planet/PlanetGravitySourceComponent.h"
 #include "Engine/World.h"
 #include "Tests/AutomationCommon.h"
 #include "GameFramework/Character.h"
@@ -403,6 +404,158 @@ bool FPlanetGravityComponentGetGravityUp::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Gravity up should fall back to world up when no gravity"),
 		FVector::DotProduct(Comp->GetGravityUp(), FVector::UpVector) > 0.99f);
 
+	Char->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 11. Distance-scaled gravity gets weaker farther from source
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetGravityComponentDistanceScaleFallsOffWithDistance,
+	"FederationGame.Planet.PlanetGravityComponent.DistanceScaleFallsOffWithDistance",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetGravityComponentDistanceScaleFallsOffWithDistance::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	UPlanetGravityComponent* Comp = nullptr;
+	ACharacter* Char = SpawnCharacterWithGravityComp(World, Comp);
+	if (!Char || !Comp) { AddError(TEXT("Failed to spawn")); return false; }
+
+	AStaticMeshActor* Planet = World->SpawnActor<AStaticMeshActor>();
+	Planet->Tags.Add(FName(TEXT("Planet")));
+	Planet->SetActorLocation(FVector::ZeroVector);
+	Planet->SetActorScale3D(FVector(20.f));
+	UPlanetGravitySourceComponent* Source = NewObject<UPlanetGravitySourceComponent>(Planet, TEXT("GravitySource"));
+	Source->RegisterComponent();
+	Source->SurfaceGravityScale = 1.0f;
+	Source->FalloffExponent = 2.0f;
+
+	Comp->MinGravityScale = 0.01f;
+	Comp->MaxGravityScale = 10.0f;
+
+	Char->SetActorLocation(FVector(0.f, 0.f, 1200.f));
+	Comp->UpdatePlanetGravity();
+	const float NearScale = Char->GetCharacterMovement()->GravityScale;
+
+	Char->SetActorLocation(FVector(0.f, 0.f, 150000.f));
+	Comp->UpdatePlanetGravity();
+	const float FarScale = Char->GetCharacterMovement()->GravityScale;
+
+	TestTrue(TEXT("Gravity scale should be stronger near the planet than far away"), NearScale > FarScale);
+
+	Planet->Destroy();
+	Char->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 12. Larger radius source exerts stronger pull at same distance
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetGravityComponentLargerRadiusSourceStronger,
+	"FederationGame.Planet.PlanetGravityComponent.LargerRadiusSourceStronger",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetGravityComponentLargerRadiusSourceStronger::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	UPlanetGravityComponent* Comp = nullptr;
+	ACharacter* Char = SpawnCharacterWithGravityComp(World, Comp);
+	if (!Char || !Comp) { AddError(TEXT("Failed to spawn")); return false; }
+
+	AStaticMeshActor* PlanetA = World->SpawnActor<AStaticMeshActor>();
+	AStaticMeshActor* PlanetB = World->SpawnActor<AStaticMeshActor>();
+	PlanetA->Tags.Add(FName(TEXT("Planet")));
+	PlanetB->Tags.Add(FName(TEXT("Planet")));
+	PlanetA->SetActorLocation(FVector(-100000.f, 0.f, 0.f));
+	PlanetB->SetActorLocation(FVector(100000.f, 0.f, 0.f));
+	PlanetA->SetActorScale3D(FVector(20.f));
+	PlanetB->SetActorScale3D(FVector(6.f));
+
+	UPlanetGravitySourceComponent* SourceA = NewObject<UPlanetGravitySourceComponent>(PlanetA, TEXT("GravitySourceA"));
+	UPlanetGravitySourceComponent* SourceB = NewObject<UPlanetGravitySourceComponent>(PlanetB, TEXT("GravitySourceB"));
+	SourceA->RegisterComponent();
+	SourceB->RegisterComponent();
+	SourceA->SurfaceGravityScale = 1.0f;
+	SourceB->SurfaceGravityScale = 1.0f;
+
+	Char->SetActorLocation(FVector::ZeroVector);
+	Comp->UpdatePlanetGravity();
+
+	TestTrue(TEXT("At midpoint, gravity should lean toward larger-radius source"),
+		FVector::DotProduct(Comp->GravityDir, FVector(-1.f, 0.f, 0.f)) > 0.1f);
+
+	PlanetA->Destroy();
+	PlanetB->Destroy();
+	Char->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 13. Two-source blend transitions smoothly across midpoint
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetGravityComponentTwoSourceBlendSmoothAcrossMidpoint,
+	"FederationGame.Planet.PlanetGravityComponent.TwoSourceBlendSmoothAcrossMidpoint",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetGravityComponentTwoSourceBlendSmoothAcrossMidpoint::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	UPlanetGravityComponent* Comp = nullptr;
+	ACharacter* Char = SpawnCharacterWithGravityComp(World, Comp);
+	if (!Char || !Comp) { AddError(TEXT("Failed to spawn")); return false; }
+
+	AStaticMeshActor* PlanetA = World->SpawnActor<AStaticMeshActor>();
+	AStaticMeshActor* PlanetB = World->SpawnActor<AStaticMeshActor>();
+	if (!PlanetA || !PlanetB) { AddError(TEXT("Failed to spawn planets")); return false; }
+
+	PlanetA->SetActorLocation(FVector(-100000.f, 0.f, 0.f));
+	PlanetB->SetActorLocation(FVector(100000.f, 0.f, 0.f));
+	PlanetA->SetActorScale3D(FVector(10.f));
+	PlanetB->SetActorScale3D(FVector(10.f));
+
+	UPlanetGravitySourceComponent* SourceA = NewObject<UPlanetGravitySourceComponent>(PlanetA, TEXT("GravitySourceA"));
+	UPlanetGravitySourceComponent* SourceB = NewObject<UPlanetGravitySourceComponent>(PlanetB, TEXT("GravitySourceB"));
+	SourceA->RegisterComponent();
+	SourceB->RegisterComponent();
+	SourceA->SurfaceGravityScale = 1.0f;
+	SourceB->SurfaceGravityScale = 1.0f;
+	SourceA->FalloffExponent = 2.0f;
+	SourceB->FalloffExponent = 2.0f;
+
+	Char->SetActorLocation(FVector(-50000.f, 0.f, 0.f));
+	Comp->UpdatePlanetGravity();
+	const float XLeft = Comp->GravityDir.X;
+
+	Char->SetActorLocation(FVector(0.f, 0.f, 0.f));
+	Comp->UpdatePlanetGravity();
+	const float XMid = Comp->GravityDir.X;
+
+	Char->SetActorLocation(FVector(50000.f, 0.f, 0.f));
+	Comp->UpdatePlanetGravity();
+	const float XRight = Comp->GravityDir.X;
+
+	TestTrue(TEXT("Left side should pull toward +X (right planet)"), XLeft > 0.1f);
+	TestTrue(TEXT("Midpoint should be near-balanced"), FMath::Abs(XMid) < 0.2f);
+	TestTrue(TEXT("Right side should pull toward -X (left planet)"), XRight < -0.1f);
+
+	PlanetA->Destroy();
+	PlanetB->Destroy();
 	Char->Destroy();
 	return true;
 }

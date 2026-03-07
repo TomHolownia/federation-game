@@ -1,6 +1,7 @@
 // Copyright Federation Game. All Rights Reserved.
 
 #include "Planet/PlanetGravityComponent.h"
+#include "Planet/PlanetGravitySourceComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -59,8 +60,26 @@ void UPlanetGravityComponent::UpdatePlanetGravity()
 	UCharacterMovementComponent* CMC = GetOwnerCMC();
 	if (!World || !Owner) return;
 
+	// Preferred modular path: any actor with a gravity source component contributes.
 	TArray<AActor*> Planets;
-	UGameplayStatics::GetAllActorsWithTag(World, FName(TEXT("Planet")), Planets);
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Candidate = *It;
+		if (!Candidate || Candidate == Owner) continue;
+		if (UPlanetGravitySourceComponent* Source = Candidate->FindComponentByClass<UPlanetGravitySourceComponent>())
+		{
+			if (Source->bAffectsGravity)
+			{
+				Planets.Add(Candidate);
+			}
+		}
+	}
+
+	if (Planets.Num() == 0)
+	{
+		// Legacy fallback for older levels that only use a Planet tag and no component.
+		UGameplayStatics::GetAllActorsWithTag(World, FName(TEXT("Planet")), Planets);
+	}
 
 	if (Planets.Num() == 0)
 	{
@@ -87,42 +106,89 @@ void UPlanetGravityComponent::UpdatePlanetGravity()
 
 	if (Planets.Num() == 0)
 	{
-		if (CMC) CMC->SetGravityDirection(FVector::DownVector);
-		GravityDir = FVector::DownVector;
+		if (CMC)
+		{
+			CMC->SetGravityDirection(FVector::ZeroVector);
+			CMC->GravityScale = 0.f;
+		}
+		GravityDir = FVector::ZeroVector;
+		LastComputedGravityScale = 0.f;
 		return;
 	}
 
 	FVector MyLoc = Owner->GetActorLocation();
-	AActor* Best = nullptr;
-	float BestDistSq = FLT_MAX;
+	FVector WeightedGravity = FVector::ZeroVector;
+	float BestStrength = 0.f;
 	for (AActor* P : Planets)
 	{
 		if (!P) continue;
-		float DistSq = FVector::DistSquared(MyLoc, P->GetActorLocation());
-		if (DistSq < BestDistSq)
+		const FVector ToPlanet = P->GetActorLocation() - MyLoc;
+		const float Dist = ToPlanet.Size();
+		if (Dist < 1.f) continue;
+
+		float Strength = 0.f;
+		if (UPlanetGravitySourceComponent* Source = P->FindComponentByClass<UPlanetGravitySourceComponent>())
 		{
-			BestDistSq = DistSq;
-			Best = P;
+			Strength = Source->ComputeGravityStrengthAtDistance(Dist);
 		}
+		else
+		{
+			// Backward-compatible fallback for legacy planet actors without a gravity source component.
+			const FBox Box = P->GetComponentsBoundingBox();
+			const FVector Extent = Box.GetExtent();
+			const float Radius = FMath::Max(1.f, FMath::Max(Extent.X, FMath::Max(Extent.Y, Extent.Z)));
+			const float Ratio = Radius / FMath::Max(Dist, Radius);
+			Strength = FMath::Pow(Ratio, 2.f);
+		}
+
+		if (Strength <= KINDA_SMALL_NUMBER) continue;
+		BestStrength = FMath::Max(BestStrength, Strength);
+		WeightedGravity += ToPlanet.GetSafeNormal() * Strength;
 	}
 
-	if (!Best)
+	// When net gravity cancels (e.g. between two planets), don't set zero — CMC would fall back to
+	// world down and you'd fall "perpendicular to both planets". Use direction to nearest planet
+	// with a small scale so you drift toward the closer one.
+	if (WeightedGravity.IsNearlyZero())
 	{
-		if (CMC) CMC->SetGravityDirection(FVector::DownVector);
-		GravityDir = FVector::DownVector;
+		AActor* Nearest = nullptr;
+		float NearestDistSq = FLT_MAX;
+		for (AActor* P : Planets)
+		{
+			if (!P) continue;
+			const float DistSq = (P->GetActorLocation() - MyLoc).SizeSquared();
+			if (DistSq >= 1.f && DistSq < NearestDistSq)
+			{
+				NearestDistSq = DistSq;
+				Nearest = P;
+			}
+		}
+		if (Nearest)
+		{
+			FVector ToNearest = (Nearest->GetActorLocation() - MyLoc).GetSafeNormal();
+			if (!ToNearest.IsNearlyZero())
+			{
+				if (CMC)
+				{
+					CMC->SetGravityDirection(ToNearest);
+					CMC->GravityScale = MinGravityScale;
+				}
+				GravityDir = ToNearest;
+				LastComputedGravityScale = MinGravityScale;
+				return;
+			}
+		}
+		if (CMC)
+		{
+			CMC->SetGravityDirection(FVector::ZeroVector);
+			CMC->GravityScale = 0.f;
+		}
+		GravityDir = FVector::ZeroVector;
+		LastComputedGravityScale = 0.f;
 		return;
 	}
 
-	FVector ToPlanet = Best->GetActorLocation() - MyLoc;
-	float Len = ToPlanet.Size();
-	if (Len < 1.f)
-	{
-		if (CMC) CMC->SetGravityDirection(FVector::DownVector);
-		GravityDir = FVector::DownVector;
-		return;
-	}
-
-	FVector Dir = ToPlanet / Len;
+	FVector Dir = WeightedGravity.GetSafeNormal();
 	if (SurfaceBlendAlpha > 0.f)
 	{
 		// Blend from radial gravity to world-down near surface transitions.
@@ -132,7 +198,19 @@ void UPlanetGravityComponent::UpdatePlanetGravity()
 			Dir = FVector::DownVector;
 		}
 	}
-	if (CMC) CMC->SetGravityDirection(Dir);
+	if (CMC)
+	{
+		CMC->SetGravityDirection(Dir);
+		if (bUseDistanceScaledGravity)
+		{
+			LastComputedGravityScale = FMath::Clamp(BaseGravityScale * BestStrength, MinGravityScale, MaxGravityScale);
+		}
+		else
+		{
+			LastComputedGravityScale = BaseGravityScale;
+		}
+		CMC->GravityScale = LastComputedGravityScale;
+	}
 	GravityDir = Dir;
 }
 
@@ -193,13 +271,11 @@ void UPlanetGravityComponent::UpdateCameraOrientation()
 	if (!FirstPersonCameraRoot) return;
 
 	UCharacterMovementComponent* CMC = GetOwnerCMC();
-	if (CMC && CMC->MovementMode == MOVE_Flying)
+	if (CMC && (CMC->MovementMode == MOVE_Flying || CMC->MovementMode == MOVE_Falling))
 	{
-		// Jetpack in space: let the character/controller drive the camera (no gravity-relative override)
-		if (ThirdPersonSpringArm)
-		{
-			ThirdPersonSpringArm->bUsePawnControlRotation = true;
-		}
+		// Jetpack or falling in space: character drives camera from SpaceViewQuat / controller;
+		// do not overwrite with gravity-relative view or the camera will appear locked (look input
+		// goes to ApplySpaceLookInput, not to this component).
 		return;
 	}
 

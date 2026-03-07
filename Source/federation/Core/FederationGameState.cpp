@@ -7,4 +7,6 @@ AFederationGameState::AFederationGameState(const FObjectInitializer& ObjectIniti
 {
 	DebugStreamingState = TEXT("Idle");
 	DebugStreamingLevelName = TEXT("");
+	DebugJetpackEnabled = false;
+	DebugJetpackBoost = false;
 }
