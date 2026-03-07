@@ -7,10 +7,11 @@
 #include "FederationHUD.generated.h"
 
 class AFederationGameState;
+class UWaypointComponent;
 
 /**
- * Developer diagnostics HUD. Draws Speed and Level (streaming state) on screen.
- * Extend this class or add more Draw* methods for additional diagnostics.
+ * Developer diagnostics HUD and waypoint indicator manager.
+ * Draws Speed / Level on screen and Canvas-based waypoint markers.
  */
 UCLASS()
 class FEDERATION_API AFederationHUD : public AHUD
@@ -22,21 +23,28 @@ public:
 
 	virtual void DrawHUD() override;
 
-	/** When true, draw developer diagnostics (Speed, Level). Toggle at runtime if needed. */
+	// --- Dev diagnostics ---
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dev")
 	bool bShowDevDiagnostics = true;
 
-	/** Vertical start position for the first line of dev text (from top of screen). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dev", meta = (ClampMin = "0", ClampMax = "1000"))
 	float DevTextStartY = 24.f;
 
-	/** Line height for dev text. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dev", meta = (ClampMin = "10", ClampMax = "50"))
 	float DevTextLineHeight = 22.f;
 
+	// --- Waypoint indicators ---
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Waypoints")
+	bool bShowWaypoints = true;
+
 protected:
-	/** Draw a single dev line (Speed, Level). Override or call from DrawHUD to add more lines. */
 	UFUNCTION(BlueprintNativeEvent, Category = "Dev")
 	void DrawDevDiagnostics(float& OutNextY);
 	virtual void DrawDevDiagnostics_Implementation(float& OutNextY);
+
+private:
+	void DrawWaypointIndicators();
+	void DrawWaypointMarker(const FVector2D& ScreenPos, const FText& Name, const FText& Distance);
 };
