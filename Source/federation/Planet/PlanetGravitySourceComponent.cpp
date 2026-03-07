@@ -11,6 +11,11 @@ UPlanetGravitySourceComponent::UPlanetGravitySourceComponent()
 
 float UPlanetGravitySourceComponent::GetSourceRadiusUU() const
 {
+	if (ManualRadius > 0.f)
+	{
+		return ManualRadius;
+	}
+
 	const AActor* Owner = GetOwner();
 	if (!Owner) return 0.f;
 

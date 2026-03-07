@@ -47,6 +47,7 @@ bool FPlanetSurfaceStreamerStreamInInsideRadius::RunTest(const FString& Paramete
 	AActor* Actor = SpawnActorWithStreamer(World, Comp);
 	if (!Actor || !Comp) { AddError(TEXT("Failed to spawn")); return false; }
 
+	Comp->TransitionProfile.bUseExplicitRadiiOverrides = true;
 	Comp->StreamingRadius = 1000.f;
 
 	// Distance squared = 500^2 = 250000, radius squared = 1000^2 = 1000000
@@ -75,6 +76,7 @@ bool FPlanetSurfaceStreamerStreamInOutsideRadius::RunTest(const FString& Paramet
 	AActor* Actor = SpawnActorWithStreamer(World, Comp);
 	if (!Actor || !Comp) { AddError(TEXT("Failed to spawn")); return false; }
 
+	Comp->TransitionProfile.bUseExplicitRadiiOverrides = true;
 	Comp->StreamingRadius = 1000.f;
 
 	// Distance squared = 2000^2 = 4000000, radius squared = 1000^2 = 1000000
@@ -103,6 +105,7 @@ bool FPlanetSurfaceStreamerStreamInOnBoundary::RunTest(const FString& Parameters
 	AActor* Actor = SpawnActorWithStreamer(World, Comp);
 	if (!Actor || !Comp) { AddError(TEXT("Failed to spawn")); return false; }
 
+	Comp->TransitionProfile.bUseExplicitRadiiOverrides = true;
 	Comp->StreamingRadius = 1000.f;
 	TestTrue(TEXT("Should stream in when exactly on boundary"), Comp->ShouldStreamIn(1000000.f));
 

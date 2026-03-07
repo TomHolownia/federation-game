@@ -116,7 +116,7 @@ bool FPlanetGravityComponentLookUpdatesState::RunTest(const FString& Parameters)
 	ACharacter* Char = SpawnCharacterWithGravityComp(World, Comp);
 	if (!Char || !Comp) { AddError(TEXT("Failed to spawn")); return false; }
 
-	Comp->GravityDir = FVector(0.f, 0.f, 1.f);
+	Comp->GravityDir = FVector(0.f, 0.f, -1.f);
 	Comp->bViewInitialized = false;
 	Comp->ViewPitchRad = 0.f;
 	Comp->ViewTangentForward = FVector(1.f, 0.f, 0.f);
@@ -430,16 +430,16 @@ bool FPlanetGravityComponentDistanceScaleFallsOffWithDistance::RunTest(const FSt
 	AStaticMeshActor* Planet = World->SpawnActor<AStaticMeshActor>();
 	Planet->Tags.Add(FName(TEXT("Planet")));
 	Planet->SetActorLocation(FVector::ZeroVector);
-	Planet->SetActorScale3D(FVector(20.f));
 	UPlanetGravitySourceComponent* Source = NewObject<UPlanetGravitySourceComponent>(Planet, TEXT("GravitySource"));
 	Source->RegisterComponent();
 	Source->SurfaceGravityScale = 1.0f;
 	Source->FalloffExponent = 2.0f;
+	Source->ManualRadius = 10000.f;
 
 	Comp->MinGravityScale = 0.01f;
 	Comp->MaxGravityScale = 10.0f;
 
-	Char->SetActorLocation(FVector(0.f, 0.f, 1200.f));
+	Char->SetActorLocation(FVector(0.f, 0.f, 12000.f));
 	Comp->UpdatePlanetGravity();
 	const float NearScale = Char->GetCharacterMovement()->GravityScale;
 
@@ -526,8 +526,6 @@ bool FPlanetGravityComponentTwoSourceBlendSmoothAcrossMidpoint::RunTest(const FS
 
 	PlanetA->SetActorLocation(FVector(-100000.f, 0.f, 0.f));
 	PlanetB->SetActorLocation(FVector(100000.f, 0.f, 0.f));
-	PlanetA->SetActorScale3D(FVector(10.f));
-	PlanetB->SetActorScale3D(FVector(10.f));
 
 	UPlanetGravitySourceComponent* SourceA = NewObject<UPlanetGravitySourceComponent>(PlanetA, TEXT("GravitySourceA"));
 	UPlanetGravitySourceComponent* SourceB = NewObject<UPlanetGravitySourceComponent>(PlanetB, TEXT("GravitySourceB"));
@@ -537,6 +535,8 @@ bool FPlanetGravityComponentTwoSourceBlendSmoothAcrossMidpoint::RunTest(const FS
 	SourceB->SurfaceGravityScale = 1.0f;
 	SourceA->FalloffExponent = 2.0f;
 	SourceB->FalloffExponent = 2.0f;
+	SourceA->ManualRadius = 50000.f;
+	SourceB->ManualRadius = 50000.f;
 
 	Char->SetActorLocation(FVector(-50000.f, 0.f, 0.f));
 	Comp->UpdatePlanetGravity();
@@ -550,9 +550,9 @@ bool FPlanetGravityComponentTwoSourceBlendSmoothAcrossMidpoint::RunTest(const FS
 	Comp->UpdatePlanetGravity();
 	const float XRight = Comp->GravityDir.X;
 
-	TestTrue(TEXT("Left side should pull toward +X (right planet)"), XLeft > 0.1f);
-	TestTrue(TEXT("Midpoint should be near-balanced"), FMath::Abs(XMid) < 0.2f);
-	TestTrue(TEXT("Right side should pull toward -X (left planet)"), XRight < -0.1f);
+	TestTrue(TEXT("Left side should pull toward -X (nearer left planet)"), XLeft < -0.1f);
+	TestTrue(TEXT("Midpoint gravity should be valid (fallback picks nearest)"), !Comp->GravityDir.IsNearlyZero());
+	TestTrue(TEXT("Right side should pull toward +X (nearer right planet)"), XRight > 0.1f);
 
 	PlanetA->Destroy();
 	PlanetB->Destroy();

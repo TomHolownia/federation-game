@@ -38,6 +38,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gravity Source", meta = (ClampMin = "0.0"))
 	float MaxInfluenceDistanceMultiplier = 0.0f;
 
+	/** If > 0, overrides the bounding-box-derived radius (useful for actors without visible geometry). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gravity Source", meta = (ClampMin = "0.0"))
+	float ManualRadius = 0.f;
+
 	UFUNCTION(BlueprintCallable, Category = "Gravity Source")
 	float GetSourceRadiusUU() const;
 

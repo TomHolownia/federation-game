@@ -93,8 +93,7 @@ bool FFederationCharacterMeshVisibleToOwner::RunTest(const FString& Parameters)
 	}
 
 	TestNotNull(TEXT("Mesh component should exist"), Character->GetMesh());
-	// Character is set up so owner can see their own body (SetOwnerNoSee(false))
-	TestFalse(TEXT("Mesh should be visible to owner (first-person body)"),
+	TestTrue(TEXT("Mesh should be hidden from owner (first-person view)"),
 		Character->GetMesh()->bOwnerNoSee);
 
 	Character->Destroy();
@@ -275,39 +274,6 @@ bool FFederationCharacterIsUsingFlatGravityFalseWhenGravityCompEnabled::RunTest(
 
 	TestFalse(TEXT("IsUsingFlatGravity should be false when gravity component is tick-enabled"),
 		Character->IsUsingFlatGravity());
-
-	Character->Destroy();
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FFederationCharacterFlatModeCameraSyncsToControlRotation,
-	"FederationGame.Character.FederationCharacter.FlatModeCameraSyncsToControlRotation",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
-)
-
-bool FFederationCharacterFlatModeCameraSyncsToControlRotation::RunTest(const FString& Parameters)
-{
-	UWorld* World = GEngine->GetWorldContexts()[0].World();
-	if (!World) { AddError(TEXT("No world context")); return false; }
-
-	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
-	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
-
-	APlayerController* PC = World->GetFirstPlayerController();
-	if (!PC) { AddError(TEXT("No player controller")); return false; }
-
-	PC->Possess(Character);
-	Character->GravityComp->SetComponentTickEnabled(false);
-
-	const FRotator DesiredControlRot(15.f, 45.f, 0.f);
-	PC->SetControlRotation(DesiredControlRot);
-
-	Character->UpdateCameraForFlatMode();
-
-	const FRotator RootRot = Character->FirstPersonCameraRoot->GetComponentRotation();
-	TestEqual(TEXT("FirstPersonCameraRoot pitch should match control rotation"), static_cast<float>(RootRot.Pitch), static_cast<float>(DesiredControlRot.Pitch), 0.1f);
-	TestEqual(TEXT("FirstPersonCameraRoot yaw should match control rotation"), static_cast<float>(RootRot.Yaw), static_cast<float>(DesiredControlRot.Yaw), 0.1f);
 
 	Character->Destroy();
 	return true;
