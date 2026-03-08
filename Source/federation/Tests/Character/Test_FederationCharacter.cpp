@@ -2,12 +2,14 @@
 
 #include "Misc/AutomationTest.h"
 #include "Character/FederationCharacter.h"
+#include "Movement/JetpackMovementComponent.h"
 #include "Planet/PlanetGravityComponent.h"
 #include "Engine/World.h"
 #include "Tests/AutomationCommon.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -91,8 +93,7 @@ bool FFederationCharacterMeshVisibleToOwner::RunTest(const FString& Parameters)
 	}
 
 	TestNotNull(TEXT("Mesh component should exist"), Character->GetMesh());
-	// Character is set up so owner can see their own body (SetOwnerNoSee(false))
-	TestFalse(TEXT("Mesh should be visible to owner (first-person body)"),
+	TestTrue(TEXT("Mesh should be hidden from owner (first-person view)"),
 		Character->GetMesh()->bOwnerNoSee);
 
 	Character->Destroy();
@@ -221,6 +222,210 @@ bool FFederationCharacterSpringArmAbsoluteRotation::RunTest(const FString& Param
 
 	TestTrue(TEXT("ThirdPersonSpringArm should use absolute rotation"),
 		Character->ThirdPersonSpringArm->IsUsingAbsoluteRotation());
+
+	Character->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Flat gravity mode (planet surface streaming)
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterIsUsingFlatGravityWhenGravityCompDisabled,
+	"FederationGame.Character.FederationCharacter.IsUsingFlatGravityWhenGravityCompDisabled",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterIsUsingFlatGravityWhenGravityCompDisabled::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	TestNotNull(TEXT("Character should have GravityComp"), Character->GravityComp.Get());
+	Character->GravityComp->SetComponentTickEnabled(false);
+
+	TestTrue(TEXT("IsUsingFlatGravity should be true when gravity component is tick-disabled"),
+		Character->IsUsingFlatGravity());
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterIsUsingFlatGravityFalseWhenGravityCompEnabled,
+	"FederationGame.Character.FederationCharacter.IsUsingFlatGravityFalseWhenGravityCompEnabled",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterIsUsingFlatGravityFalseWhenGravityCompEnabled::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	TestNotNull(TEXT("Character should have GravityComp"), Character->GravityComp.Get());
+	Character->GravityComp->SetComponentTickEnabled(true);
+
+	TestFalse(TEXT("IsUsingFlatGravity should be false when gravity component is tick-enabled"),
+		Character->IsUsingFlatGravity());
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterFlatGravityWhenSurfaceBlendHigh,
+	"FederationGame.Character.FederationCharacter.FlatGravityWhenSurfaceBlendHigh",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterFlatGravityWhenSurfaceBlendHigh::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+	if (!Character->GravityComp) { AddError(TEXT("Missing GravityComp")); return false; }
+
+	Character->GravityComp->SetComponentTickEnabled(true);
+	Character->GravityComp->SetSurfaceBlendAlpha(0.75f);
+
+	TestTrue(TEXT("Character should use flat gravity when blend alpha is high"), Character->IsUsingFlatGravity());
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterRadialGravityWhenSurfaceBlendLow,
+	"FederationGame.Character.FederationCharacter.RadialGravityWhenSurfaceBlendLow",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterRadialGravityWhenSurfaceBlendLow::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+	if (!Character->GravityComp) { AddError(TEXT("Missing GravityComp")); return false; }
+
+	Character->GravityComp->SetComponentTickEnabled(true);
+	Character->GravityComp->SetSurfaceBlendAlpha(0.25f);
+
+	TestFalse(TEXT("Character should remain radial-gravity mode when blend alpha is low"), Character->IsUsingFlatGravity());
+
+	Character->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Jetpack
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterJetpackActivatesWhenFalling,
+	"FederationGame.Character.FederationCharacter.JetpackActivatesWhenFalling",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterJetpackActivatesWhenFalling::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	Character->GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+	TestTrue(TEXT("Character should be falling"), Character->GetCharacterMovement()->IsFalling());
+
+	Character->ActivateJetpack();
+
+	TestTrue(TEXT("Jetpack should report enabled"), Character->IsJetpackEnabled());
+	TestTrue(TEXT("Legacy jetpack bool should mirror component state"), Character->bJetpackActive);
+	TestTrue(TEXT("Movement mode should be Flying"),
+		Character->GetCharacterMovement()->MovementMode == MOVE_Flying);
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterJetpackDeactivatesOnLanded,
+	"FederationGame.Character.FederationCharacter.JetpackDeactivatesOnLanded",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterJetpackDeactivatesOnLanded::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	Character->ActivateJetpack();
+	TestTrue(TEXT("Jetpack should be active"), Character->IsJetpackEnabled());
+
+	Character->DeactivateJetpack();
+	TestFalse(TEXT("Jetpack should be disabled after deactivation"), Character->IsJetpackEnabled());
+	TestTrue(TEXT("Movement mode should be Falling after deactivation"),
+		Character->GetCharacterMovement()->MovementMode == MOVE_Falling);
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterJetpackSetsMaxFlySpeed,
+	"FederationGame.Character.FederationCharacter.JetpackSetsMaxFlySpeed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterJetpackSetsMaxFlySpeed::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	Character->ActivateJetpack();
+	TestEqual(TEXT("MaxFlySpeed should match JetpackComponent MaxJetpackSpeed"),
+		Character->GetCharacterMovement()->MaxFlySpeed, Character->JetpackComponent->MaxJetpackSpeed);
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FFederationCharacterJetpackDoesNotActivateOnGround,
+	"FederationGame.Character.FederationCharacter.JetpackDoesNotActivateOnGround",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FFederationCharacterJetpackDoesNotActivateOnGround::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world context")); return false; }
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character) { AddError(TEXT("Failed to spawn character")); return false; }
+
+	Character->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	TestFalse(TEXT("Character should not be falling"), Character->GetCharacterMovement()->IsFalling());
+
+	Character->OnJumpPressed();
+	TestFalse(TEXT("Jetpack should NOT activate from ground"), Character->IsJetpackEnabled());
 
 	Character->Destroy();
 	return true;
