@@ -47,14 +47,12 @@ void FBulkImportAssetsCommand::Unregister()
 {
 }
 
-FString FBulkImportAssetsCommand::GetImportSourceDir()
+TArray<FImportMapping> FBulkImportAssetsCommand::GetImportMappings()
 {
-	return FPaths::ProjectConfigDir() / TEXT("ImportSource") / TEXT("Human");
-}
-
-FString FBulkImportAssetsCommand::GetImportDestinationPath()
-{
-	return TEXT("/Game/Characters/Human");
+	TArray<FImportMapping> Mappings;
+	Mappings.Add({ TEXT("Human/Processed"),  TEXT("/Game/Characters/Human") });
+	Mappings.Add({ TEXT("Props/Separated"),  TEXT("/Game/Federation/Props") });
+	return Mappings;
 }
 
 void FBulkImportAssetsCommand::RegisterMenus()
@@ -66,7 +64,7 @@ void FBulkImportAssetsCommand::RegisterMenus()
 		Section.AddMenuEntry(
 			BulkImportCommandName,
 			LOCTEXT("ImportAssetsLabel", "Import Assets"),
-			LOCTEXT("ImportAssetsTooltip", "Import FBX/OBJ/GLTF from Config/ImportSource/Human into Content/Characters/Human."),
+			LOCTEXT("ImportAssetsTooltip", "Import all processed assets from Config/ImportSource/ subdirectories into Content/."),
 			FSlateIcon(),
 			FUIAction(FExecuteAction::CreateStatic(&FBulkImportAssetsCommand::Execute))
 		);
@@ -81,29 +79,21 @@ TArray<FString> FBulkImportAssetsCommand::GetFilesToImportFromDirectory(const FS
 	return FilesToImport;
 }
 
-void FBulkImportAssetsCommand::Execute()
+int32 FBulkImportAssetsCommand::ImportFromMapping(const FImportMapping& Mapping)
 {
-	const FString SourceDir = GetImportSourceDir();
-	const FString DestPath = GetImportDestinationPath();
+	const FString SourceDir = FPaths::ProjectConfigDir() / TEXT("ImportSource") / Mapping.SourceSubDir;
 
 	if (!IFileManager::Get().DirectoryExists(*SourceDir))
 	{
-		FMessageDialog::Open(EAppMsgType::Ok, FText::Format(
-			LOCTEXT("SourceDirMissing", "Source directory does not exist: {0}\n\nCreate it and place one or more FBX (or OBJ/GLTF) files there, then run Import Assets again."),
-			FText::FromString(SourceDir)
-		));
-		return;
+		UE_LOG(LogBulkImport, Log, TEXT("Skipping (dir not found): %s"), *SourceDir);
+		return 0;
 	}
 
 	TArray<FString> FilesToImport = GetFilesToImportFromDirectory(SourceDir);
-
 	if (FilesToImport.Num() == 0)
 	{
-		FMessageDialog::Open(EAppMsgType::Ok, FText::Format(
-			LOCTEXT("NoFiles", "No FBX, OBJ, or GLTF files found in {0}"),
-			FText::FromString(SourceDir)
-		));
-		return;
+		UE_LOG(LogBulkImport, Log, TEXT("Skipping (no files): %s"), *SourceDir);
+		return 0;
 	}
 
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
@@ -112,7 +102,7 @@ void FBulkImportAssetsCommand::Execute()
 	{
 		UAssetImportTask* Task = NewObject<UAssetImportTask>(GetTransientPackage());
 		Task->Filename = FilePath;
-		Task->DestinationPath = DestPath;
+		Task->DestinationPath = Mapping.DestinationPath;
 		Task->DestinationName = FPaths::GetBaseFilename(FilePath);
 		Task->bAutomated = true;
 		Task->bReplaceExisting = true;
@@ -131,11 +121,37 @@ void FBulkImportAssetsCommand::Execute()
 		}
 		else
 		{
-			UE_LOG(LogBulkImport, Warning, TEXT("Import failed or produced no assets: %s"), *Task->Filename);
+			UE_LOG(LogBulkImport, Warning, TEXT("Import failed: %s"), *Task->Filename);
 		}
 	}
 
-	FString ResultMsg = FString::Printf(TEXT("Imported %d of %d asset(s) to %s."), SuccessCount, Tasks.Num(), *DestPath);
+	UE_LOG(LogBulkImport, Log, TEXT("Imported %d/%d from %s -> %s"), SuccessCount, Tasks.Num(), *SourceDir, *Mapping.DestinationPath);
+	return SuccessCount;
+}
+
+void FBulkImportAssetsCommand::Execute()
+{
+	TArray<FImportMapping> Mappings = GetImportMappings();
+
+	int32 TotalImported = 0;
+	int32 TotalFiles = 0;
+
+	for (const FImportMapping& Mapping : Mappings)
+	{
+		const FString SourceDir = FPaths::ProjectConfigDir() / TEXT("ImportSource") / Mapping.SourceSubDir;
+		TArray<FString> Files = GetFilesToImportFromDirectory(SourceDir);
+		TotalFiles += Files.Num();
+		TotalImported += ImportFromMapping(Mapping);
+	}
+
+	if (TotalFiles == 0)
+	{
+		FMessageDialog::Open(EAppMsgType::Ok,
+			LOCTEXT("NoFilesAnywhere", "No FBX/OBJ/GLTF files found in any Config/ImportSource/ subdirectory.\n\nRun the Blender process_mesh.py script first to prepare assets."));
+		return;
+	}
+
+	FString ResultMsg = FString::Printf(TEXT("Imported %d of %d asset(s) across %d source(s)."), TotalImported, TotalFiles, Mappings.Num());
 	FMessageDialog::Open(EAppMsgType::Ok, FText::FromString(ResultMsg));
 }
 

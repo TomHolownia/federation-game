@@ -45,6 +45,8 @@ def parse_args():
     parser.add_argument("--output", required=True, help="Output directory for separated FBX files")
     parser.add_argument("--decimate", type=int, default=0, help="Target face count per object (0 = skip)")
     parser.add_argument("--names", default="", help="Comma-separated names for objects (by size descending)")
+    parser.add_argument("--no-separate", action="store_true", dest="no_separate",
+                        help="Skip separation, export the whole mesh as one FBX")
     return parser.parse_args(argv)
 
 
@@ -67,6 +69,77 @@ def import_mesh(filepath):
         raise ValueError(f"Unsupported format: {ext}")
 
     print(f"[FED] Imported: {filepath}")
+
+
+def fix_texture_paths(input_filepath):
+    """Find textures in .fbm folder next to the input file and reconnect them."""
+    input_dir = os.path.dirname(input_filepath)
+    base_name = os.path.splitext(os.path.basename(input_filepath))[0]
+    fbm_dir = os.path.join(input_dir, f"{base_name}.fbm")
+
+    texture_files = {}
+    search_dirs = [fbm_dir, input_dir]
+    for search_dir in search_dirs:
+        if not os.path.isdir(search_dir):
+            continue
+        for f in os.listdir(search_dir):
+            fl = f.lower()
+            if fl.endswith(('.png', '.jpg', '.jpeg', '.tga', '.tiff', '.exr')):
+                full_path = os.path.join(search_dir, f)
+                texture_files[fl] = full_path
+
+    if not texture_files:
+        print("[FED] No texture files found nearby, skipping texture fix")
+        return
+
+    print(f"[FED] Found {len(texture_files)} texture file(s)")
+
+    fixed = 0
+    for img in bpy.data.images:
+        if img.filepath and not os.path.isfile(bpy.path.abspath(img.filepath)):
+            img_name = os.path.basename(img.filepath).lower()
+            if img_name in texture_files:
+                img.filepath = texture_files[img_name]
+                img.reload()
+                fixed += 1
+                print(f"[FED]   Relinked: {img.name} -> {texture_files[img_name]}")
+
+    channel_map = {
+        'Base Color':  ['basecolor', 'diffuse', 'albedo', 'color'],
+        'Metallic':    ['metallic', 'metal'],
+        'Roughness':   ['roughness', 'rough'],
+        'Normal':      ['normal', 'norm', 'nrm'],
+    }
+
+    for mat in bpy.data.materials:
+        if not mat.use_nodes:
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type != 'BSDF_PRINCIPLED':
+                continue
+            for input_name, keywords in channel_map.items():
+                inp = node.inputs.get(input_name)
+                if not inp or inp.is_linked:
+                    continue
+                for name_hint, path in texture_files.items():
+                    if any(kw in name_hint for kw in keywords):
+                        tex_node = mat.node_tree.nodes.new('ShaderNodeTexImage')
+                        tex_node.image = bpy.data.images.load(path)
+                        if input_name == 'Normal':
+                            normal_map = mat.node_tree.nodes.new('ShaderNodeNormalMap')
+                            mat.node_tree.links.new(tex_node.outputs['Color'], normal_map.inputs['Color'])
+                            mat.node_tree.links.new(normal_map.outputs['Normal'], inp)
+                            tex_node.image.colorspace_settings.name = 'Non-Color'
+                        elif input_name in ('Metallic', 'Roughness'):
+                            mat.node_tree.links.new(tex_node.outputs['Color'], inp)
+                            tex_node.image.colorspace_settings.name = 'Non-Color'
+                        else:
+                            mat.node_tree.links.new(tex_node.outputs['Color'], inp)
+                        fixed += 1
+                        print(f"[FED]   Connected {input_name}: {path}")
+                        break
+
+    print(f"[FED] Fixed {fixed} texture reference(s)")
 
 
 def get_mesh_objects():
@@ -134,8 +207,10 @@ def export_object_as_fbx(obj, output_dir, name):
         apply_unit_scale=True,
         mesh_smooth_type='FACE',
         use_mesh_modifiers=True,
+        path_mode='COPY',
+        embed_textures=True,
     )
-    print(f"[FED] Exported: {filepath}")
+    print(f"[FED] Exported (textures embedded): {filepath}")
 
 
 def main():
@@ -155,7 +230,13 @@ def main():
 
     clear_scene()
     import_mesh(input_path)
-    objects = separate_by_loose_parts()
+    fix_texture_paths(input_path)
+
+    if args.no_separate:
+        objects = get_mesh_objects()
+        print(f"[FED] Skipping separation, {len(objects)} object(s)")
+    else:
+        objects = separate_by_loose_parts()
 
     if not objects:
         print("[FED] No objects to process, exiting")
