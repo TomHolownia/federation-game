@@ -77,8 +77,8 @@ void UInventoryWidget::BuildWidgetTree()
 
 	// Size-constrained panel (centered)
 	USizeBox* SizeBox = WidgetTree->ConstructWidget<USizeBox>();
-	SizeBox->SetMinDesiredWidth(620.f);
-	SizeBox->SetMinDesiredHeight(420.f);
+	SizeBox->SetMinDesiredWidth(820.f);
+	SizeBox->SetMinDesiredHeight(560.f);
 
 	UCanvasPanelSlot* SizeSlot = Root->AddChildToCanvas(SizeBox);
 	SizeSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
