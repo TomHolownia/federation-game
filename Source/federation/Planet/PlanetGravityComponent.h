@@ -37,6 +37,19 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gravity")
 	float AlignInterpSpeed = 25.f;
 
+	/** Scales movement gravity based on distance to dominant gravity source. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gravity")
+	bool bUseDistanceScaledGravity = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gravity", meta = (ClampMin = "0.0"))
+	float BaseGravityScale = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gravity", meta = (ClampMin = "0.0"))
+	float MinGravityScale = 0.1f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gravity", meta = (ClampMin = "0.0"))
+	float MaxGravityScale = 3.0f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gravity|Camera")
 	bool bUseGravityRelativeLook = true;
 
@@ -51,6 +64,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Gravity")
 	FVector GetGravityDirection() const { return GravityDir; }
+
+	UFUNCTION(BlueprintCallable, Category = "Gravity")
+	void SetSurfaceBlendAlpha(float InAlpha);
+
+	UFUNCTION(BlueprintCallable, Category = "Gravity")
+	float GetSurfaceBlendAlpha() const { return SurfaceBlendAlpha; }
 
 	UFUNCTION(BlueprintCallable, Category = "Gravity")
 	FVector GetGravityUp() const { return GravityDir.IsNearlyZero() ? FVector::UpVector : (-GravityDir).GetSafeNormal(); }
@@ -74,6 +93,8 @@ public:
 	FVector ViewTangentForward = FVector::ForwardVector;
 	bool bViewInitialized = false;
 	float ViewPitchRad = 0.f;
+	float SurfaceBlendAlpha = 0.f;
+	float LastComputedGravityScale = 1.f;
 
 private:
 	UPROPERTY()

@@ -53,6 +53,28 @@ This file captures a handful of practical UE5 “gotchas” encountered while im
     - `BrakingDecelerationWalking`
     - Walkable floor thresholds (e.g. `SetWalkableFloorZ(...)`)
 
+## Live Coding crashes when adding new module dependencies (UMG, Slate, etc.)
+
+- **Symptom**: Editor crashes during Live Coding with `EXCEPTION_ACCESS_VIOLATION` in a `dynamic initializer for 'StatPtr_STAT_...'` inside a newly-linked module header (e.g. `UserWidget.h:1808` for UMG's `STAT_CreateWidget`).
+- **Cause**: Headers like `Blueprint/UserWidget.h` contain `DECLARE_CYCLE_STAT` macros that define static variables. When Live Coding loads the patch DLL, these static initializers run during `dllmain_crt_process_attach` and access memory that isn't valid in the patch DLL context. This happens **every** Live Coding build, not just the first one.
+- **Why it persists after editor restart**: If you reopen the editor without a full external rebuild, the old DLLs (compiled with the old dependency set) are loaded. Live Coding then patches against those old DLLs with new code, causing the same mismatch crash.
+- **Fix**:
+  1. **Avoid adding UMG/Slate to frequently-iterated game modules.** Use Canvas-based HUD drawing (`AHUD::DrawHUD`, `DrawText`, `DrawLine`, `DrawTexture`) instead of `UUserWidget` / `CreateWidget<>()`. Canvas drawing is fully Live Coding compatible.
+  2. If you must use UMG, isolate it in a separate module that changes infrequently, or accept that adding/removing the dependency requires a cold rebuild.
+  3. **When you do change Build.cs dependencies**: close the editor, delete stale `.patch_*` files from `Binaries/Win64/`, build from the command line (`Build.bat`), then relaunch the editor. Do not rely on Live Coding for the first build after a dependency change.
+
+## UActorComponent name shadowing: `bIsActive`, `SetActive`, `Activate`, `Deactivate`
+
+- **Symptom**: UHT error: `Member variable declaration: 'bIsActive' cannot be defined in 'UMyComponent' as it is already defined in scope 'UActorComponent' (shadowing is not allowed)`.
+- **Cause**: `UActorComponent` already owns `bIsActive`, `SetActive()`, `Activate()`, `Deactivate()`, and `IsActive()`. UHT enforces no-shadowing for UPROPERTY/UFUNCTION names.
+- **Fix**: Use distinct names for your component's properties. E.g. `bWaypointEnabled` / `SetWaypointEnabled()` / `IsWaypointEnabled()` instead of `bIsActive` / `SetActive()` / `GetIsActive()`.
+
+## UPROPERTY() does not support TWeakObjectPtr in containers
+
+- **Symptom**: UHT errors or unexpected behaviour when using `UPROPERTY() TArray<TWeakObjectPtr<...>>` or `UPROPERTY() TMap<TWeakObjectPtr<...>, ...>`.
+- **Cause**: UHT's reflection system only supports `TArray<UObject*>`, `TArray<TObjectPtr<T>>`, etc. `TWeakObjectPtr` is not a supported container element type for UPROPERTY.
+- **Fix**: Remove the `UPROPERTY()` macro from weak-pointer containers. The objects they point to must be kept alive by other means (e.g. being in the viewport widget tree, or held by another UPROPERTY elsewhere).
+
 ## Windows/PowerShell build quirks (Build.bat)
 
 - PowerShell does not support `&&` as a statement separator (use `;`).

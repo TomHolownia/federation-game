@@ -13,6 +13,7 @@ class USceneComponent;
 class UInputMappingContext;
 class UInputAction;
 class UPlanetGravityComponent;
+class UJetpackMovementComponent;
 
 /**
  * First-person player character using the Animation Starter Pack mannequin.
@@ -83,6 +84,12 @@ public:
 	TObjectPtr<UInputAction> JumpAction;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> ViewToggleAction;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> RollAction;
+
+	/** Jetpack boost (C): when jetpack on, toggles 50k speed + high acceleration. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> JetpackBoostAction;
 
 	/** Toggle between first-person and third-person view. */
 	UFUNCTION(BlueprintCallable, Category = "Camera")
@@ -96,12 +103,50 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gravity")
 	TObjectPtr<UPlanetGravityComponent> GravityComp;
 
+	/** True when using flat gravity (e.g. on streamed surface level). When true, movement/look use control rotation and camera is driven from controller. */
+	UFUNCTION(BlueprintCallable, Category = "Gravity")
+	bool IsUsingFlatGravity() const;
+
+	// --- Jetpack ---
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement|Jetpack")
+	bool bJetpackActive = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement|Jetpack")
+	TObjectPtr<UJetpackMovementComponent> JetpackComponent;
+
+	UFUNCTION(BlueprintCallable, Category = "Movement|Jetpack")
+	void ActivateJetpack();
+
+	UFUNCTION(BlueprintCallable, Category = "Movement|Jetpack")
+	void DeactivateJetpack();
+
+	UFUNCTION(BlueprintCallable, Category = "Movement|Jetpack")
+	bool IsJetpackEnabled() const;
+
+	/** Syncs first- and third-person camera to the controller's control rotation. Used in flat mode each tick; exposed for tests. */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void UpdateCameraForFlatMode();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	virtual void Landed(const FHitResult& Hit) override;
+
+	bool bJetpackThrustUp = false;
+
+public:
+	void OnJumpPressed();
+	void OnJumpReleased();
+	void OnJetpackBoostPressed();
+
+protected:
 
 	void SetupFirstPersonView();
+	void InitializeSpaceViewFromCurrent();
+	void ApplySpaceLookInput(float YawDegrees, float PitchDegrees, float RollDegrees = 0.f);
+	void UpdateCameraForSpaceMode();
 
 	void AddLookYaw(float Value);
 	void AddLookPitch(float Value);
@@ -111,6 +156,7 @@ protected:
 	void OnLook(const FInputActionValue& Value);
 	void OnLookYaw(const FInputActionValue& Value);
 	void OnLookPitch(const FInputActionValue& Value);
+	void OnRoll(const FInputActionValue& Value);
 
 	void SetupEnhancedInput();
 	void CreateDefaultInputActionsAndContext();
@@ -118,4 +164,9 @@ protected:
 	void UpdateActiveCamera();
 
 	void TryLoadDefaultMesh();
+
+	FQuat SpaceViewQuat = FQuat::Identity;
+	bool bSpaceViewInitialized = false;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Space")
+	float SpaceRollSpeedDegrees = 96.f;
 };

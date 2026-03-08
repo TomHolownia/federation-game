@@ -27,6 +27,22 @@ This project uses Large World Coordinates (LWC) for galaxy-scale positioning.
 - **Do not hand-place galaxy-scale content.** Use procedural generation (e.g. `AGalaxyStarField`) and data-driven spawning. See `docs/technical/ai-workflow-and-galaxy-scale.md`.
 - **AI cannot click in the editor.** To "place" actors, use Editor Utilities, Python editor scripts, or data-driven spawners; the doc above describes the workflow.
 
+## Live Coding Compatibility
+
+### Never add UMG/Slate to the game module
+Adding `UMG`, `Slate`, or `SlateCore` to the game module's `Build.cs` will crash Live Coding on every patch (static initializer in `UserWidget.h` accesses invalid memory during DLL load). Use Canvas-based HUD drawing (`DrawText`, `DrawLine`, `DrawTexture` in `AHUD::DrawHUD`) instead of `UUserWidget` / `CreateWidget<>()`.
+
+If UMG is genuinely needed later, isolate it in a separate module that changes infrequently.
+
+### Changing Build.cs dependencies requires a cold rebuild
+When adding or removing module dependencies: close the editor, delete stale `.patch_*` files from `Binaries/Win64/`, build externally via `Build.bat`, then relaunch.
+
+### Don't shadow UActorComponent names
+`UActorComponent` owns `bIsActive`, `SetActive()`, `Activate()`, `Deactivate()`, `IsActive()`. UHT forbids shadowing these in subclasses. Use distinct names (e.g. `bWaypointEnabled`, `SetWaypointEnabled()`).
+
+### UPROPERTY does not support TWeakObjectPtr in containers
+`TArray<TWeakObjectPtr<T>>` and `TMap<TWeakObjectPtr<T>, ...>` cannot be marked `UPROPERTY()`. Remove the macro and manage lifetimes manually.
+
 ## C++ Best Practices
 
 ### Headers
