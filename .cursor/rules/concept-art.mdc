@@ -1,0 +1,19 @@
+---
+description: Where concept art and reference images go
+globs:
+  - Content/Concepts/**
+---
+
+# Concept Art
+
+All concept art and reference images go in `Content/Concepts/`.
+
+- One image per subject (or batch sheet for props)
+- PNG format preferred
+- Tracked automatically by Git LFS via `.gitattributes`
+- Only commit approved references, not every iteration
+
+## Before generating concept art
+
+- **No real-world branding** -- no logos, brand names, or trademarked designs. Use in-universe markings only.
+- **Read the lore first** -- connect to Confluence via the Atlassian MCP and read the relevant game design docs (races, factions, planets, items, timeline). Assets must reflect the Federation universe's aesthetic, technology level, and faction identity.

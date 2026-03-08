@@ -62,4 +62,31 @@ bool FBulkImportSourceDirectoryExists::RunTest(const FString& Parameters)
 	return true;
 }
 
+/**
+ * GetImportMappings returns at least one mapping and all mappings have non-empty paths.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBulkImportMappingsAreValid,
+	"FederationEditor.BulkImport.MappingsAreValid",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FBulkImportMappingsAreValid::RunTest(const FString& Parameters)
+{
+	TArray<FImportMapping> Mappings = FBulkImportAssetsCommand::GetImportMappings();
+
+	TestTrue(TEXT("Should have at least one mapping"), Mappings.Num() > 0);
+
+	for (const FImportMapping& M : Mappings)
+	{
+		TestFalse(TEXT("SourceSubDir should not be empty"), M.SourceSubDir.IsEmpty());
+		TestFalse(TEXT("DestinationPath should not be empty"), M.DestinationPath.IsEmpty());
+		TestTrue(
+			TEXT("DestinationPath should start with /Game/"),
+			M.DestinationPath.StartsWith(TEXT("/Game/"))
+		);
+	}
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
