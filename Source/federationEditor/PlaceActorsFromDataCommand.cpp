@@ -3,6 +3,8 @@
 #include "PlaceActorsFromDataCommand.h"
 #include "DefaultGalaxyStarMaterial.h"
 #include "Galaxy/GalaxyStarField.h"
+#include "Planet/Planet.h"
+#include "Navigation/WaypointComponent.h"
 #include "Skybox/SkySphere.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Editor.h"
@@ -13,6 +15,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -86,6 +89,10 @@ namespace
 			else if (FNameProperty* NameProp = CastField<FNameProperty>(Prop))
 			{
 				NameProp->SetPropertyValue(ValuePtr, FName(*Val->AsString()));
+			}
+			else if (FTextProperty* TextProp = CastField<FTextProperty>(Prop))
+			{
+				TextProp->SetPropertyValue(ValuePtr, FText::FromString(Val->AsString()));
 			}
 		}
 	}
@@ -349,11 +356,60 @@ void FPlaceActorsFromDataCommand::Execute(const FString& RelativeFileName)
 				{
 					ApplyPropertiesFromJson(SMComp, MergedProps);
 				}
+				// Generic component pass: apply matching properties on every component type
+				// (e.g. SurfaceLevelPath on PlanetSurfaceStreamer, SurfaceGravityScale on gravity source).
+				TInlineComponentArray<UActorComponent*> AllComponents;
+				Spawned->GetComponents(AllComponents);
+				for (UActorComponent* Component : AllComponents)
+				{
+					ApplyPropertiesFromJson(Component, MergedProps);
+				}
 			}
 			// StaticMeshActor: Small Planet floor (flat) or planet sphere. FloorRadius = flat scale (XY = R/50, Z = 0.2). PlanetRadius = sphere scale (uniform R/50).
 			if (AStaticMeshActor* StaticMeshActor = Cast<AStaticMeshActor>(Spawned))
 			{
 				UStaticMeshComponent* SMComp = StaticMeshActor->GetStaticMeshComponent();
+				// Optional material override from Properties. Accepts named colors
+				// ("Red", "Blue", "Green", "Orange", "Yellow", "White") or an asset path.
+				FString MaterialPath;
+				if (MergedProps->TryGetStringField(TEXT("Material"), MaterialPath) && !MaterialPath.IsEmpty() && SMComp)
+				{
+					UMaterialInterface* Mat = nullptr;
+
+					auto TryNamedColor = [&](const FString& Name) -> bool
+					{
+						static const TMap<FString, FLinearColor> NamedColors = {
+							{ TEXT("red"),    FLinearColor::Red },
+							{ TEXT("blue"),   FLinearColor::Blue },
+							{ TEXT("green"),  FLinearColor::Green },
+							{ TEXT("yellow"), FLinearColor::Yellow },
+							{ TEXT("white"),  FLinearColor::White },
+							{ TEXT("orange"), FLinearColor(1.f, 0.5f, 0.f, 1.f) },
+						};
+						const FLinearColor* Color = NamedColors.Find(Name.ToLower());
+						if (!Color) return false;
+
+						UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+						if (!Base) Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/DefaultMaterial.DefaultMaterial"));
+						if (!Base) return false;
+
+						UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Base, StaticMeshActor);
+						if (!MID) return false;
+
+						MID->SetVectorParameterValue(FName("Color"), *Color);
+						Mat = MID;
+						return true;
+					};
+
+					if (!TryNamedColor(MaterialPath))
+					{
+						Mat = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
+					}
+					if (Mat)
+					{
+						SMComp->SetMaterial(0, Mat);
+					}
+				}
 				double PlanetRadius = 0.0;
 				if (MergedProps->TryGetNumberField(TEXT("PlanetRadius"), PlanetRadius) && PlanetRadius > 0.0)
 				{
@@ -407,6 +463,13 @@ void FPlaceActorsFromDataCommand::Execute(const FString& RelativeFileName)
 			if (ASkySphere* SkySphere = Cast<ASkySphere>(Spawned))
 			{
 				SkySphere->UpdateSkyMaterial();
+			}
+			if (APlanet* Planet = Cast<APlanet>(Spawned))
+			{
+				if (!Planet->PlanetName.IsEmpty() && Planet->WaypointComp)
+				{
+					Planet->WaypointComp->DisplayName = Planet->PlanetName;
+				}
 			}
 			// SkeletalMeshActor / Mannequin: ensure component has a mesh so it never shows as a white dot (same pattern as GalaxyStarField defaults).
 			if (USkeletalMeshComponent* SMC = Spawned->FindComponentByClass<USkeletalMeshComponent>())
