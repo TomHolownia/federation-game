@@ -2153,4 +2153,135 @@ bool FPlanetStreamerExitAltMultiplierOverride::RunTest(const FString& Parameters
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// 64. Off-axis planet: player placed above surface, not beside it
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerOffAxisPlayerAboveSurface,
+	"FederationGame.Planet.PlanetSurfaceStreamer.OffAxisPlanetPlacesPlayerAboveSurface",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerOffAxisPlayerAboveSurface::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const FVector PlanetCenter(2000000.f, 0.f, 0.f);
+	const float R = 1100000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	const FVector ApproachDir = (FVector::ZeroVector - PlanetCenter).GetSafeNormal();
+	const FVector TangentPoint = PlanetCenter + ApproachDir * R;
+	Comp->SurfaceLevelWorldOrigin = TangentPoint;
+	Comp->ComputeTangentFrame(PlanetCenter);
+
+	const float HandoffDist = R * 1.01f;
+	const FVector PlayerAtHandoff = PlanetCenter + ApproachDir * HandoffDist;
+	const FVector SurfacePos = Comp->SpaceToSurfacePosition(PlayerAtHandoff);
+
+	const FVector OffsetFromOrigin = SurfacePos - TangentPoint;
+	const float AltAlongNormal = FVector::DotProduct(OffsetFromOrigin, Comp->TangentNormal);
+	const float LateralDist = (OffsetFromOrigin - Comp->TangentNormal * AltAlongNormal).Size();
+
+	TestTrue(TEXT("Player should be above surface level (positive altitude along normal)"),
+		AltAlongNormal > 100.f);
+	TestTrue(TEXT("Player should be near center laterally"),
+		LateralDist < 100.f);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 65. Off-axis planet: round-trip preserves position
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerOffAxisRoundTrip,
+	"FederationGame.Planet.PlanetSurfaceStreamer.OffAxisPlanetRoundTrip",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerOffAxisRoundTrip::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const FVector PlanetCenter(2000000.f, 500000.f, -300000.f);
+	const float R = 1100000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	const FVector ApproachDir = FVector(1.f, 2.f, 3.f).GetSafeNormal();
+	const FVector TangentPoint = PlanetCenter + ApproachDir * R;
+	Comp->SurfaceLevelWorldOrigin = TangentPoint;
+	Comp->ComputeTangentFrame(PlanetCenter);
+
+	const FVector SpacePos = PlanetCenter + ApproachDir * (R + 15000.f);
+	const FVector SurfPos = Comp->SpaceToSurfacePosition(SpacePos);
+	const FVector BackToSpace = Comp->SurfaceToSpacePosition(SurfPos);
+
+	TestTrue(TEXT("Off-axis round-trip Space->Surface->Space should recover"),
+		SpacePos.Equals(BackToSpace, 300.f));
+
+	const FVector SurfOrig = TangentPoint + Comp->TangentX * 3000.f + Comp->TangentY * 4000.f + Comp->TangentNormal * 6000.f;
+	const FVector SpaceFromSurf = Comp->SurfaceToSpacePosition(SurfOrig);
+	const FVector BackToSurf = Comp->SpaceToSurfacePosition(SpaceFromSurf);
+
+	TestTrue(TEXT("Off-axis round-trip Surface->Space->Surface should recover"),
+		SurfOrig.Equals(BackToSurf, 300.f));
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 66. Off-axis planet: ShouldStreamOut uses tangent normal, not world Z
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerOffAxisStreamOutUsesNormal,
+	"FederationGame.Planet.PlanetSurfaceStreamer.OffAxisStreamOutUsesNormalNotWorldZ",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerOffAxisStreamOutUsesNormal::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const FVector PlanetCenter(2000000.f, 0.f, 0.f);
+	const float R = 1100000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	const FVector ApproachDir = (FVector::ZeroVector - PlanetCenter).GetSafeNormal();
+	Comp->SurfaceLevelWorldOrigin = PlanetCenter + ApproachDir * R;
+	Comp->ComputeTangentFrame(PlanetCenter);
+	Comp->ExitAltitude = 50000.f;
+
+	const FVector SurfOrigin = Comp->SurfaceLevelWorldOrigin;
+
+	const FVector HighWorldZ = SurfOrigin + FVector(0, 0, 60000.f);
+	TestFalse(TEXT("High world-Z should NOT trigger exit when TangentNormal is along X"),
+		Comp->ShouldStreamOut(HighWorldZ, SurfOrigin));
+
+	const FVector HighAlongNormal = SurfOrigin + Comp->TangentNormal * 60000.f;
+	TestTrue(TEXT("High along tangent normal SHOULD trigger exit"),
+		Comp->ShouldStreamOut(HighAlongNormal, SurfOrigin));
+
+	const FVector LowAlongNormal = SurfOrigin + Comp->TangentNormal * 10000.f;
+	TestFalse(TEXT("Low along tangent normal should NOT trigger exit"),
+		Comp->ShouldStreamOut(LowAlongNormal, SurfOrigin));
+
+	Actor->Destroy();
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

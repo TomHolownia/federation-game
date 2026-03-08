@@ -357,7 +357,7 @@ void UPlanetSurfaceStreamer::SetPlanetFadeAlpha(float Alpha)
 bool UPlanetSurfaceStreamer::ShouldStreamOut(const FVector& PlayerLocation, const FVector& SurfaceOrigin) const
 {
 	const FVector Offset = PlayerLocation - SurfaceOrigin;
-	const float AltitudeAboveSurface = Offset.Z;
+	const float AltitudeAboveSurface = FVector::DotProduct(Offset, TangentNormal);
 	return AltitudeAboveSurface > GetEffectiveExitAltitude();
 }
 
@@ -648,19 +648,22 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSurface()
 		Owner->SetActorEnableCollision(false);
 	}
 
-	// --- 6. Switch to flat gravity + preserve velocity ---
+	// --- 6. Switch to surface gravity + preserve velocity ---
+	const FVector SurfaceUp = TangentNormal;
+	const FVector SurfaceDown = -TangentNormal;
+
 	if (Char && Char->GetCharacterMovement())
 	{
-		Char->GetCharacterMovement()->SetGravityDirection(FVector::DownVector);
-		// On streamed surface levels we want standard Earth-like falling behavior.
+		Char->GetCharacterMovement()->SetGravityDirection(SurfaceDown);
 		Char->GetCharacterMovement()->GravityScale = 1.f;
-		const float DownSpeed = FMath::Max(0.f, -IncomingVelocity.Z);
-		Char->GetCharacterMovement()->Velocity = FVector(IncomingVelocity.X, IncomingVelocity.Y, -DownSpeed);
+		const float DownSpeed = FMath::Max(0.f, -FVector::DotProduct(IncomingVelocity, SurfaceUp));
+		const FVector TangentVelocity = IncomingVelocity - FVector::DotProduct(IncomingVelocity, SurfaceUp) * SurfaceUp;
+		Char->GetCharacterMovement()->Velocity = TangentVelocity + SurfaceDown * DownSpeed;
 	}
 
 	// --- 7. Preserve forward exactly, blend roll to local horizon at handoff ---
 	FQuat SurfaceViewQuat = LastTransitionOrientation.bIsValid
-		? ComputeForwardPriorityBlendedViewQuat(LastTransitionOrientation.ViewQuat, FVector::UpVector, 1.f)
+		? ComputeForwardPriorityBlendedViewQuat(LastTransitionOrientation.ViewQuat, SurfaceUp, 1.f)
 		: FQuat::Identity;
 
 	if (!LastTransitionOrientation.bIsValid && PC)
@@ -687,10 +690,10 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSurface()
 		PC->SetControlRotation(SurfaceControlRotation);
 	}
 
-	// --- 8. Reset gravity component to flat-world state ---
+	// --- 8. Reset gravity component to surface-aligned state ---
 	if (GravComp)
 	{
-		GravComp->GravityDir = FVector::DownVector;
+		GravComp->GravityDir = SurfaceDown;
 		GravComp->bViewInitialized = false;
 		GravComp->SetSurfaceBlendAlpha(1.f);
 	}
@@ -809,7 +812,7 @@ FVector UPlanetSurfaceStreamer::SpaceToSurfacePosition(const FVector& SpacePos) 
 	const float LocalY = Elevation * R;
 	const float LocalZ = FMath::Max(300.f, Altitude);
 
-	return SurfaceLevelWorldOrigin + FVector(LocalX, LocalY, LocalZ);
+	return SurfaceLevelWorldOrigin + TangentX * LocalX + TangentY * LocalY + TangentNormal * LocalZ;
 }
 
 FVector UPlanetSurfaceStreamer::SurfaceToSpacePosition(const FVector& SurfacePos) const
@@ -818,10 +821,13 @@ FVector UPlanetSurfaceStreamer::SurfaceToSpacePosition(const FVector& SurfacePos
 	const FVector PlanetCenter = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
 	const float R = FMath::Max(1.f, GetPlanetRadiusFromOwner());
 	const FVector Offset = SurfacePos - SurfaceLevelWorldOrigin;
-	const float Altitude = Offset.Z;
 
-	const float AngleX = Offset.X / R;
-	const float AngleY = Offset.Y / R;
+	const float LocalX = FVector::DotProduct(Offset, TangentX);
+	const float LocalY = FVector::DotProduct(Offset, TangentY);
+	const float Altitude = FVector::DotProduct(Offset, TangentNormal);
+
+	const float AngleX = LocalX / R;
+	const float AngleY = LocalY / R;
 
 	// Rodrigues rotation: rotate TangentNormal around TangentY by AngleX,
 	// then around TangentX by -AngleY to get the sphere direction.
