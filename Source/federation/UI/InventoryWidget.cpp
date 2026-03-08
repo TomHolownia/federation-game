@@ -16,14 +16,10 @@
 #include "Components/Spacer.h"
 #include "Components/SizeBox.h"
 #include "Blueprint/WidgetTree.h"
+#include "Styling/CoreStyle.h"
 
 namespace InvUI
 {
-	static FSlateFontInfo MakeFont(const TCHAR* Typeface, int32 Size)
-	{
-		return FSlateFontInfo(FPaths::EngineContentDir() / FString::Printf(TEXT("Slate/Fonts/%s.ttf"), Typeface), Size);
-	}
-
 	static const FLinearColor PanelBg(0.02f, 0.02f, 0.05f, 0.92f);
 	static const FLinearColor SectionBg(0.04f, 0.04f, 0.08f, 0.6f);
 	static const FSlateColor Accent = FSlateColor(FLinearColor(0.3f, 0.8f, 1.0f));
@@ -71,9 +67,9 @@ void UInventoryWidget::BuildWidgetTree()
 {
 	if (!WidgetTree) return;
 
-	FSlateFontInfo TitleFont = InvUI::MakeFont(TEXT("Roboto-Bold"), 18);
-	FSlateFontInfo SectionFont = InvUI::MakeFont(TEXT("Roboto-Bold"), 13);
-	FSlateFontInfo ContentFont = InvUI::MakeFont(TEXT("Roboto-Regular"), 12);
+	FSlateFontInfo TitleFont = FCoreStyle::GetDefaultFontStyle("Bold", 18);
+	FSlateFontInfo SectionFont = FCoreStyle::GetDefaultFontStyle("Bold", 13);
+	FSlateFontInfo ContentFont = FCoreStyle::GetDefaultFontStyle("Regular", 12);
 
 	// Root canvas (full screen)
 	UCanvasPanel* Root = WidgetTree->ConstructWidget<UCanvasPanel>();
@@ -193,14 +189,14 @@ void UInventoryWidget::BuildWidgetTree()
 		Gap->SetSize(FVector2D(0.f, 6.f));
 		EquipVBox->AddChildToVerticalBox(Gap);
 
-		for (EEquipmentSlot Slot : InvUI::AllSlots)
+		for (EEquipmentSlot EquipSlot : InvUI::AllSlots)
 		{
 			UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
 			UVerticalBoxSlot* RowSlot = EquipVBox->AddChildToVerticalBox(Row);
 			RowSlot->SetPadding(FMargin(0.f, 2.f));
 
 			UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>();
-			Label->SetText(GetSlotDisplayName(Slot));
+			Label->SetText(GetSlotDisplayName(EquipSlot));
 			Label->SetColorAndOpacity(InvUI::TextDim);
 			Label->SetFont(ContentFont);
 			Label->SetMinDesiredWidth(90.f);
@@ -213,7 +209,7 @@ void UInventoryWidget::BuildWidgetTree()
 			Value->SetFont(ContentFont);
 			Row->AddChildToHorizontalBox(Value);
 
-			EquipmentSlotTexts.Add(Slot, Value);
+			EquipmentSlotTexts.Add(EquipSlot, Value);
 		}
 	}
 }
@@ -252,7 +248,7 @@ void UInventoryWidget::PopulateItems()
 	if (!ItemListBox) return;
 	ItemListBox->ClearChildren();
 
-	FSlateFontInfo Font = InvUI::MakeFont(TEXT("Roboto-Regular"), 11);
+	FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Regular", 11);
 
 	if (!InventoryComp || InventoryComp->GetItems().Num() == 0)
 	{

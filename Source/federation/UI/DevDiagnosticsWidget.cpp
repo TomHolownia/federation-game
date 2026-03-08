@@ -10,17 +10,13 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Components/Spacer.h"
 #include "Blueprint/WidgetTree.h"
+#include "Styling/CoreStyle.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 
 namespace DevDiag
 {
-	static FSlateFontInfo MakeFont(const TCHAR* Typeface, int32 Size)
-	{
-		return FSlateFontInfo(FPaths::EngineContentDir() / FString::Printf(TEXT("Slate/Fonts/%s.ttf"), Typeface), Size);
-	}
-
 	static const FSlateColor Accent = FSlateColor(FLinearColor(0.3f, 0.8f, 1.0f));
 	static const FSlateColor Content = FSlateColor(FLinearColor(0.9f, 0.95f, 1.f));
 }
@@ -50,8 +46,8 @@ void UDevDiagnosticsWidget::BuildWidgetTree()
 	UVerticalBox* VBox = WidgetTree->ConstructWidget<UVerticalBox>();
 	Background->AddChild(VBox);
 
-	FSlateFontInfo TitleFont = DevDiag::MakeFont(TEXT("Roboto-Bold"), 14);
-	FSlateFontInfo ContentFont = DevDiag::MakeFont(TEXT("Roboto-Regular"), 12);
+	FSlateFontInfo TitleFont = FCoreStyle::GetDefaultFontStyle("Bold", 14);
+	FSlateFontInfo ContentFont = FCoreStyle::GetDefaultFontStyle("Regular", 12);
 
 	// Title
 	UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>();
