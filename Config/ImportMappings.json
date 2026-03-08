@@ -1,0 +1,4 @@
+[
+  { "Source": "Human/Processed", "Destination": "/Game/Characters/Human" },
+  { "Source": "Props/Separated", "Destination": "/Game/Federation/Props" }
+]

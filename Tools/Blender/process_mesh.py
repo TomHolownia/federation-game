@@ -25,6 +25,8 @@ Arguments:
   --decimate Target face count per object (optional, skip if omitted)
   --names    Comma-separated names for objects, assigned by size descending
              (optional, defaults to input filename + index)
+  --scale    Uniform scale factor (default 1.0; use 100 for meter-to-cm)
+  --no-separate  Skip separation, export as one FBX
 """
 
 import bpy
@@ -47,6 +49,8 @@ def parse_args():
     parser.add_argument("--names", default="", help="Comma-separated names for objects (by size descending)")
     parser.add_argument("--no-separate", action="store_true", dest="no_separate",
                         help="Skip separation, export the whole mesh as one FBX")
+    parser.add_argument("--scale", type=float, default=1.0,
+                        help="Uniform scale factor applied after import (use 100 for m->cm conversion)")
     return parser.parse_args(argv)
 
 
@@ -142,6 +146,19 @@ def fix_texture_paths(input_filepath):
     print(f"[FED] Fixed {fixed} texture reference(s)")
 
 
+def apply_scale(scale_factor):
+    """Scale all objects uniformly (e.g. 100 to convert meters to centimeters)."""
+    if scale_factor == 1.0:
+        return
+    for obj in bpy.data.objects:
+        if obj.type == 'MESH':
+            obj.scale *= scale_factor
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    bpy.ops.object.select_all(action='DESELECT')
+    print(f"[FED] Applied scale factor: {scale_factor}x")
+
+
 def get_mesh_objects():
     return [obj for obj in bpy.data.objects if obj.type == 'MESH']
 
@@ -227,10 +244,12 @@ def main():
     print(f"[FED] Input:    {input_path}")
     print(f"[FED] Output:   {output_dir}")
     print(f"[FED] Decimate: {args.decimate if args.decimate > 0 else 'skip'}")
+    print(f"[FED] Scale:    {args.scale}x")
 
     clear_scene()
     import_mesh(input_path)
     fix_texture_paths(input_path)
+    apply_scale(args.scale)
 
     if args.no_separate:
         objects = get_mesh_objects()

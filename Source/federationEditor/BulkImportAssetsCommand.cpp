@@ -10,8 +10,12 @@
 #include "ToolMenuSection.h"
 #include "Misc/MessageDialog.h"
 #include "Misc/Paths.h"
+#include "Misc/FileHelper.h"
 #include "HAL/FileManager.h"
 #include "Logging/LogMacros.h"
+#include "Factories/FbxImportUI.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogBulkImport, Log, All);
 
@@ -50,8 +54,39 @@ void FBulkImportAssetsCommand::Unregister()
 TArray<FImportMapping> FBulkImportAssetsCommand::GetImportMappings()
 {
 	TArray<FImportMapping> Mappings;
-	Mappings.Add({ TEXT("Human/Processed"),  TEXT("/Game/Characters/Human") });
-	Mappings.Add({ TEXT("Props/Separated"),  TEXT("/Game/Federation/Props") });
+
+	const FString JsonPath = FPaths::ProjectConfigDir() / TEXT("ImportMappings.json");
+	FString JsonString;
+	if (FFileHelper::LoadFileToString(JsonString, *JsonPath))
+	{
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
+		TArray<TSharedPtr<FJsonValue>> JsonArray;
+		if (FJsonSerializer::Deserialize(Reader, JsonArray))
+		{
+			for (const TSharedPtr<FJsonValue>& Entry : JsonArray)
+			{
+				const TSharedPtr<FJsonObject>& Obj = Entry->AsObject();
+				if (Obj.IsValid())
+				{
+					FString Source = Obj->GetStringField(TEXT("Source"));
+					FString Destination = Obj->GetStringField(TEXT("Destination"));
+					if (!Source.IsEmpty() && !Destination.IsEmpty())
+					{
+						Mappings.Add({ Source, Destination });
+					}
+				}
+			}
+			UE_LOG(LogBulkImport, Log, TEXT("Loaded %d mapping(s) from %s"), Mappings.Num(), *JsonPath);
+		}
+	}
+
+	if (Mappings.Num() == 0)
+	{
+		UE_LOG(LogBulkImport, Log, TEXT("No ImportMappings.json found, using defaults"));
+		Mappings.Add({ TEXT("Human/Processed"),  TEXT("/Game/Characters/Human") });
+		Mappings.Add({ TEXT("Props/Separated"),  TEXT("/Game/Federation/Props") });
+	}
+
 	return Mappings;
 }
 
@@ -107,6 +142,17 @@ int32 FBulkImportAssetsCommand::ImportFromMapping(const FImportMapping& Mapping)
 		Task->bAutomated = true;
 		Task->bReplaceExisting = true;
 		Task->bSave = true;
+
+		if (FPaths::GetExtension(FilePath, false).Equals(TEXT("fbx"), ESearchCase::IgnoreCase))
+		{
+			UFbxImportUI* ImportUI = NewObject<UFbxImportUI>(Task);
+			ImportUI->bImportMaterials = true;
+			ImportUI->bImportTextures = true;
+			ImportUI->bImportAsSkeletal = false;
+			ImportUI->bAutomatedImportShouldDetectType = true;
+			Task->Options = ImportUI;
+		}
+
 		Tasks.Add(Task);
 	}
 
