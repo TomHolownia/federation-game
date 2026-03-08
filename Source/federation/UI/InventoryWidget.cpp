@@ -1,6 +1,8 @@
 // Copyright Federation Game. All Rights Reserved.
 
 #include "UI/InventoryWidget.h"
+#include "UI/ItemTileWidget.h"
+#include "UI/EquipmentSlotWidget.h"
 #include "Inventory/InventoryComponent.h"
 #include "Inventory/ItemBase.h"
 #include "Components/TextBlock.h"
@@ -13,6 +15,8 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Components/ProgressBar.h"
 #include "Components/ScrollBox.h"
+#include "Components/WrapBox.h"
+#include "Components/WrapBoxSlot.h"
 #include "Components/Spacer.h"
 #include "Components/SizeBox.h"
 #include "Blueprint/WidgetTree.h"
@@ -26,19 +30,21 @@ namespace InvUI
 	static const FSlateColor TextMain = FSlateColor(FLinearColor(0.92f, 0.95f, 1.f));
 	static const FSlateColor TextDim = FSlateColor(FLinearColor(0.55f, 0.6f, 0.65f));
 	static const FLinearColor WeightBarFill(0.3f, 0.8f, 1.0f, 1.0f);
-	static const FLinearColor WeightBarBg(0.1f, 0.1f, 0.15f, 1.0f);
 
-	static const TArray<EEquipmentSlot> AllSlots = {
-		EEquipmentSlot::Head,
-		EEquipmentSlot::Body,
-		EEquipmentSlot::PrimaryWeapon,
-		EEquipmentSlot::SecondaryWeapon,
-		EEquipmentSlot::Shield,
-		EEquipmentSlot::Ability1,
-		EEquipmentSlot::Ability2,
-		EEquipmentSlot::Biomorph1,
-		EEquipmentSlot::Biomorph2,
-		EEquipmentSlot::Biomorph3
+	// Spatial positions for equipment slots (column, row) → pixel offset.
+	// Layout mirrors a character silhouette per the design sketch.
+	struct FSlotPos { EEquipmentSlot Slot; float X; float Y; };
+	static const FSlotPos SlotPositions[] = {
+		{ EEquipmentSlot::Head,            86.f,   0.f },
+		{ EEquipmentSlot::SecondaryWeapon,  0.f,  86.f },
+		{ EEquipmentSlot::Body,            86.f,  86.f },
+		{ EEquipmentSlot::PrimaryWeapon,  172.f,  86.f },
+		{ EEquipmentSlot::Shield,           0.f, 172.f },
+		{ EEquipmentSlot::Ability1,        86.f, 172.f },
+		{ EEquipmentSlot::Ability2,       172.f, 172.f },
+		{ EEquipmentSlot::Biomorph1,        0.f, 258.f },
+		{ EEquipmentSlot::Biomorph2,       86.f, 258.f },
+		{ EEquipmentSlot::Biomorph3,      172.f, 258.f },
 	};
 }
 
@@ -69,7 +75,7 @@ void UInventoryWidget::BuildWidgetTree()
 
 	FSlateFontInfo TitleFont = FCoreStyle::GetDefaultFontStyle("Bold", 18);
 	FSlateFontInfo SectionFont = FCoreStyle::GetDefaultFontStyle("Bold", 13);
-	FSlateFontInfo ContentFont = FCoreStyle::GetDefaultFontStyle("Regular", 12);
+	FSlateFontInfo SmallFont = FCoreStyle::GetDefaultFontStyle("Regular", 12);
 
 	// Root canvas (full screen)
 	UCanvasPanel* Root = WidgetTree->ConstructWidget<UCanvasPanel>();
@@ -77,8 +83,8 @@ void UInventoryWidget::BuildWidgetTree()
 
 	// Size-constrained panel (centered)
 	USizeBox* SizeBox = WidgetTree->ConstructWidget<USizeBox>();
-	SizeBox->SetMinDesiredWidth(820.f);
-	SizeBox->SetMinDesiredHeight(560.f);
+	SizeBox->SetMinDesiredWidth(920.f);
+	SizeBox->SetMinDesiredHeight(620.f);
 
 	UCanvasPanelSlot* SizeSlot = Root->AddChildToCanvas(SizeBox);
 	SizeSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
@@ -88,13 +94,13 @@ void UInventoryWidget::BuildWidgetTree()
 	// Background
 	UBorder* Background = WidgetTree->ConstructWidget<UBorder>();
 	Background->SetBrushColor(InvUI::PanelBg);
-	Background->SetPadding(FMargin(20.f, 16.f));
+	Background->SetPadding(FMargin(24.f, 18.f));
 	SizeBox->AddChild(Background);
 
 	UVerticalBox* OuterVBox = WidgetTree->ConstructWidget<UVerticalBox>();
 	Background->AddChild(OuterVBox);
 
-	// ── Header row: title + weight ──
+	// ── Header row: title + "Weight: X / Y" ──
 	{
 		UHorizontalBox* HeaderRow = WidgetTree->ConstructWidget<UHorizontalBox>();
 		OuterVBox->AddChildToVerticalBox(HeaderRow);
@@ -107,13 +113,20 @@ void UInventoryWidget::BuildWidgetTree()
 		TitleSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		TitleSlot->SetVerticalAlignment(VAlign_Center);
 
+		UTextBlock* WeightLabel = WidgetTree->ConstructWidget<UTextBlock>();
+		WeightLabel->SetText(FText::FromString(TEXT("Weight:")));
+		WeightLabel->SetColorAndOpacity(InvUI::Accent);
+		WeightLabel->SetFont(SmallFont);
+		UHorizontalBoxSlot* WlSlot = HeaderRow->AddChildToHorizontalBox(WeightLabel);
+		WlSlot->SetVerticalAlignment(VAlign_Center);
+		WlSlot->SetPadding(FMargin(8.f, 0.f, 6.f, 0.f));
+
 		WeightText = WidgetTree->ConstructWidget<UTextBlock>();
 		WeightText->SetText(FText::FromString(TEXT("0.0 / 100.0")));
 		WeightText->SetColorAndOpacity(InvUI::TextDim);
-		WeightText->SetFont(ContentFont);
+		WeightText->SetFont(SmallFont);
 		UHorizontalBoxSlot* WtSlot = HeaderRow->AddChildToHorizontalBox(WeightText);
 		WtSlot->SetVerticalAlignment(VAlign_Center);
-		WtSlot->SetPadding(FMargin(8.f, 0.f, 0.f, 0.f));
 	}
 
 	// ── Weight bar ──
@@ -128,23 +141,23 @@ void UInventoryWidget::BuildWidgetTree()
 		OuterVBox->AddChildToVerticalBox(WeightBar);
 
 		USpacer* Gap2 = WidgetTree->ConstructWidget<USpacer>();
-		Gap2->SetSize(FVector2D(0.f, 12.f));
+		Gap2->SetSize(FVector2D(0.f, 14.f));
 		OuterVBox->AddChildToVerticalBox(Gap2);
 	}
 
-	// ── Two-column body: Items | Equipment ──
+	// ── Two-column body: Items (tile grid) | Equipped (spatial slots) ──
 	UHorizontalBox* Columns = WidgetTree->ConstructWidget<UHorizontalBox>();
 	UVerticalBoxSlot* ColSlot = OuterVBox->AddChildToVerticalBox(Columns);
 	ColSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 
-	// Left column: Items
+	// Left column: Items tile grid
 	{
 		UBorder* ItemSection = WidgetTree->ConstructWidget<UBorder>();
 		ItemSection->SetBrushColor(InvUI::SectionBg);
 		ItemSection->SetPadding(FMargin(12.f, 8.f));
 		UHorizontalBoxSlot* ItemColSlot = Columns->AddChildToHorizontalBox(ItemSection);
 		ItemColSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-		ItemColSlot->SetPadding(FMargin(0.f, 0.f, 6.f, 0.f));
+		ItemColSlot->SetPadding(FMargin(0.f, 0.f, 8.f, 0.f));
 
 		UVerticalBox* ItemVBox = WidgetTree->ConstructWidget<UVerticalBox>();
 		ItemSection->AddChild(ItemVBox);
@@ -156,60 +169,64 @@ void UInventoryWidget::BuildWidgetTree()
 		ItemVBox->AddChildToVerticalBox(ItemsTitle);
 
 		USpacer* Gap = WidgetTree->ConstructWidget<USpacer>();
-		Gap->SetSize(FVector2D(0.f, 6.f));
+		Gap->SetSize(FVector2D(0.f, 8.f));
 		ItemVBox->AddChildToVerticalBox(Gap);
 
 		UScrollBox* Scroll = WidgetTree->ConstructWidget<UScrollBox>();
 		UVerticalBoxSlot* ScrollSlot = ItemVBox->AddChildToVerticalBox(Scroll);
 		ScrollSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 
-		ItemListBox = WidgetTree->ConstructWidget<UVerticalBox>();
-		Scroll->AddChild(ItemListBox);
+		ItemGrid = WidgetTree->ConstructWidget<UWrapBox>();
+		ItemGrid->SetInnerSlotPadding(FVector2D(4.f, 4.f));
+		Scroll->AddChild(ItemGrid);
 	}
 
-	// Right column: Equipment
+	// Right column: Equipped — spatial slot layout
 	{
 		UBorder* EquipSection = WidgetTree->ConstructWidget<UBorder>();
 		EquipSection->SetBrushColor(InvUI::SectionBg);
 		EquipSection->SetPadding(FMargin(12.f, 8.f));
 		UHorizontalBoxSlot* EquipColSlot = Columns->AddChildToHorizontalBox(EquipSection);
-		EquipColSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-		EquipColSlot->SetPadding(FMargin(6.f, 0.f, 0.f, 0.f));
+		EquipColSlot->SetPadding(FMargin(8.f, 0.f, 0.f, 0.f));
 
 		UVerticalBox* EquipVBox = WidgetTree->ConstructWidget<UVerticalBox>();
 		EquipSection->AddChild(EquipVBox);
 
 		UTextBlock* EquipTitle = WidgetTree->ConstructWidget<UTextBlock>();
-		EquipTitle->SetText(FText::FromString(TEXT("EQUIPMENT")));
+		EquipTitle->SetText(FText::FromString(TEXT("EQUIPPED")));
 		EquipTitle->SetColorAndOpacity(InvUI::Accent);
 		EquipTitle->SetFont(SectionFont);
 		EquipVBox->AddChildToVerticalBox(EquipTitle);
 
 		USpacer* Gap = WidgetTree->ConstructWidget<USpacer>();
-		Gap->SetSize(FVector2D(0.f, 6.f));
+		Gap->SetSize(FVector2D(0.f, 8.f));
 		EquipVBox->AddChildToVerticalBox(Gap);
 
-		for (EEquipmentSlot EquipSlot : InvUI::AllSlots)
+		// Canvas panel for spatial slot positioning
+		UCanvasPanel* SlotCanvas = WidgetTree->ConstructWidget<UCanvasPanel>();
+		UVerticalBoxSlot* CanvasSlot = EquipVBox->AddChildToVerticalBox(SlotCanvas);
+		CanvasSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+
+		// Equipment slot widgets are created dynamically (not via WidgetTree)
+		// because they are UUserWidget subclasses that need CreateWidget<>().
+		// We defer creation to SetInventoryComponent / first refresh.
+		// Store the canvas for later use.
+		SlotCanvas->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
+		// Pre-create empty slot outlines as placeholders
+		for (const InvUI::FSlotPos& Pos : InvUI::SlotPositions)
 		{
-			UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
-			UVerticalBoxSlot* RowSlot = EquipVBox->AddChildToVerticalBox(Row);
-			RowSlot->SetPadding(FMargin(0.f, 2.f));
+			UBorder* Placeholder = WidgetTree->ConstructWidget<UBorder>();
+			Placeholder->SetBrushColor(FLinearColor(0.04f, 0.04f, 0.08f, 0.5f));
 
-			UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>();
-			Label->SetText(GetSlotDisplayName(EquipSlot));
-			Label->SetColorAndOpacity(InvUI::TextDim);
-			Label->SetFont(ContentFont);
-			Label->SetMinDesiredWidth(90.f);
-			UHorizontalBoxSlot* LabelSlot = Row->AddChildToHorizontalBox(Label);
-			LabelSlot->SetPadding(FMargin(0.f, 0.f, 8.f, 0.f));
+			USizeBox* PlaceholderSize = WidgetTree->ConstructWidget<USizeBox>();
+			PlaceholderSize->SetWidthOverride(80.f);
+			PlaceholderSize->SetHeightOverride(80.f);
+			PlaceholderSize->AddChild(Placeholder);
 
-			UTextBlock* Value = WidgetTree->ConstructWidget<UTextBlock>();
-			Value->SetText(FText::FromString(TEXT("Empty")));
-			Value->SetColorAndOpacity(InvUI::TextMain);
-			Value->SetFont(ContentFont);
-			Row->AddChildToHorizontalBox(Value);
-
-			EquipmentSlotTexts.Add(EquipSlot, Value);
+			UCanvasPanelSlot* PSlot = SlotCanvas->AddChildToCanvas(PlaceholderSize);
+			PSlot->SetPosition(FVector2D(Pos.X, Pos.Y));
+			PSlot->SetAutoSize(true);
 		}
 	}
 }
@@ -234,29 +251,27 @@ void UInventoryWidget::SetInventoryComponent(UInventoryComponent* InComp)
 
 void UInventoryWidget::RefreshInventory()
 {
-	PopulateItems();
-	PopulateEquipment();
+	PopulateItemTiles();
+	RefreshEquipmentSlots();
 	UpdateWeightBar();
 }
 
 // ---------------------------------------------------------------------------
-// Populate helpers
+// Item tile grid
 // ---------------------------------------------------------------------------
 
-void UInventoryWidget::PopulateItems()
+void UInventoryWidget::PopulateItemTiles()
 {
-	if (!ItemListBox) return;
-	ItemListBox->ClearChildren();
-
-	FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Regular", 11);
+	if (!ItemGrid) return;
+	ItemGrid->ClearChildren();
 
 	if (!InventoryComp || InventoryComp->GetItems().Num() == 0)
 	{
 		UTextBlock* Empty = NewObject<UTextBlock>(this);
 		Empty->SetText(FText::FromString(TEXT("No items")));
-		Empty->SetColorAndOpacity(InvUI::TextDim);
-		Empty->SetFont(Font);
-		ItemListBox->AddChild(Empty);
+		Empty->SetColorAndOpacity(FSlateColor(FLinearColor(0.55f, 0.6f, 0.65f)));
+		Empty->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 11));
+		ItemGrid->AddChild(Empty);
 		return;
 	}
 
@@ -264,57 +279,70 @@ void UInventoryWidget::PopulateItems()
 	{
 		if (!Entry.ItemDef) continue;
 
-		UHorizontalBox* Row = NewObject<UHorizontalBox>(this);
-
-		// Name
-		UTextBlock* Name = NewObject<UTextBlock>(this);
-		Name->SetText(Entry.ItemDef->DisplayName);
-		Name->SetColorAndOpacity(InvUI::TextMain);
-		Name->SetFont(Font);
-		UHorizontalBoxSlot* NameSlot = Cast<UHorizontalBoxSlot>(Row->AddChild(Name));
-		if (NameSlot)
+		UItemTileWidget* Tile = CreateWidget<UItemTileWidget>(GetOwningPlayer());
+		if (Tile)
 		{
-			NameSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-			NameSlot->SetPadding(FMargin(0.f, 2.f, 12.f, 2.f));
+			Tile->SetItem(Entry.ItemDef, Entry.Count);
+			ItemGrid->AddChild(Tile);
 		}
-
-		// Count
-		UTextBlock* Count = NewObject<UTextBlock>(this);
-		Count->SetText(FText::FromString(FString::Printf(TEXT("x%d"), Entry.Count)));
-		Count->SetColorAndOpacity(InvUI::TextDim);
-		Count->SetFont(Font);
-		UHorizontalBoxSlot* CountSlot = Cast<UHorizontalBoxSlot>(Row->AddChild(Count));
-		if (CountSlot)
-		{
-			CountSlot->SetPadding(FMargin(0.f, 2.f, 12.f, 2.f));
-		}
-
-		// Weight
-		UTextBlock* Weight = NewObject<UTextBlock>(this);
-		Weight->SetText(FText::FromString(FString::Printf(TEXT("%.1f"), Entry.ItemDef->Weight * Entry.Count)));
-		Weight->SetColorAndOpacity(InvUI::TextDim);
-		Weight->SetFont(Font);
-		Row->AddChild(Weight);
-
-		ItemListBox->AddChild(Row);
 	}
 }
 
-void UInventoryWidget::PopulateEquipment()
+// ---------------------------------------------------------------------------
+// Equipment slots
+// ---------------------------------------------------------------------------
+
+void UInventoryWidget::RefreshEquipmentSlots()
 {
-	for (auto& Pair : EquipmentSlotTexts)
+	// Create slot widgets on first call (needs CreateWidget which requires a player controller)
+	if (EquipmentSlots.Num() == 0 && GetOwningPlayer())
 	{
-		if (!Pair.Value) continue;
-		UItemBase* Item = InventoryComp ? InventoryComp->GetEquippedItem(Pair.Key) : nullptr;
-		if (Item)
+		// Find the slot canvas — it's inside the equipment section
+		// We need to add the slot widgets to the same canvas that has the placeholders.
+		// The canvas is the last canvas panel we created in BuildWidgetTree.
+		// Navigate: Root → SizeBox → Background → OuterVBox → Columns → EquipSection → EquipVBox → Canvas
+		UCanvasPanel* SlotCanvas = nullptr;
+
+		if (WidgetTree && WidgetTree->RootWidget)
 		{
-			Pair.Value->SetText(Item->DisplayName);
-			Pair.Value->SetColorAndOpacity(InvUI::TextMain);
+			// Walk the tree to find our slot canvas
+			TArray<UWidget*> AllWidgets;
+			WidgetTree->GetAllWidgets(AllWidgets);
+			for (UWidget* W : AllWidgets)
+			{
+				UCanvasPanel* Canvas = Cast<UCanvasPanel>(W);
+				if (Canvas && Canvas != WidgetTree->RootWidget)
+				{
+					SlotCanvas = Canvas;
+				}
+			}
 		}
-		else
+
+		if (SlotCanvas)
 		{
-			Pair.Value->SetText(FText::FromString(TEXT("Empty")));
-			Pair.Value->SetColorAndOpacity(InvUI::TextDim);
+			for (const InvUI::FSlotPos& Pos : InvUI::SlotPositions)
+			{
+				UEquipmentSlotWidget* SlotWidget = CreateWidget<UEquipmentSlotWidget>(GetOwningPlayer());
+				if (!SlotWidget) continue;
+
+				SlotWidget->Configure(Pos.Slot, InventoryComp);
+				SlotWidget->OnSlotChanged.BindUObject(this, &UInventoryWidget::RefreshInventory);
+
+				UCanvasPanelSlot* CSlot = SlotCanvas->AddChildToCanvas(SlotWidget);
+				CSlot->SetPosition(FVector2D(Pos.X, Pos.Y));
+				CSlot->SetAutoSize(true);
+
+				EquipmentSlots.Add(SlotWidget);
+			}
+		}
+	}
+
+	// Refresh existing slot widgets
+	for (UEquipmentSlotWidget* SlotWidget : EquipmentSlots)
+	{
+		if (SlotWidget)
+		{
+			SlotWidget->Refresh();
 		}
 	}
 }
@@ -336,9 +364,9 @@ void UInventoryWidget::UpdateWeightBar()
 
 // ---------------------------------------------------------------------------
 
-FText UInventoryWidget::GetSlotDisplayName(EEquipmentSlot Slot)
+FText UInventoryWidget::GetSlotDisplayName(EEquipmentSlot InSlot)
 {
-	switch (Slot)
+	switch (InSlot)
 	{
 		case EEquipmentSlot::Head:            return FText::FromString(TEXT("Head"));
 		case EEquipmentSlot::Body:            return FText::FromString(TEXT("Body"));

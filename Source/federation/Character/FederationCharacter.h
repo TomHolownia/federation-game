@@ -179,6 +179,7 @@ protected:
 	void UpdateActiveCamera();
 
 	void TryLoadDefaultMesh();
+	void AddStarterItems();
 
 	FQuat SpaceViewQuat = FQuat::Identity;
 	bool bSpaceViewInitialized = false;

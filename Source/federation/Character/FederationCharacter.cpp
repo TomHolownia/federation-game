@@ -5,6 +5,10 @@
 #include "Movement/JetpackMovementComponent.h"
 #include "Planet/PlanetGravityComponent.h"
 #include "Inventory/InventoryComponent.h"
+#include "Inventory/ItemBase.h"
+#include "Inventory/WeaponItem.h"
+#include "Inventory/EquipmentItem.h"
+#include "Inventory/ConsumableItem.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -108,6 +112,8 @@ void AFederationCharacter::BeginPlay()
 	{
 		GravityComp->SetCameraReferences(FirstPersonCameraRoot, ThirdPersonSpringArm);
 	}
+
+	AddStarterItems();
 }
 
 bool AFederationCharacter::IsUsingFlatGravity() const
@@ -701,6 +707,63 @@ void AFederationCharacter::OnToggleInventory()
 	if (!PC) return;
 	AFederationHUD* HUD = Cast<AFederationHUD>(PC->GetHUD());
 	if (HUD) HUD->ToggleInventory();
+}
+
+void AFederationCharacter::AddStarterItems()
+{
+	if (!InventoryComp || InventoryComp->GetItems().Num() > 0) return;
+
+	auto MakeEquipment = [](FName ID, const FString& Name, EEquipmentSlot InSlot, float Weight)
+	{
+		UEquipmentItem* E = NewObject<UEquipmentItem>();
+		E->ItemID = ID;
+		E->DisplayName = FText::FromString(Name);
+		E->Slot = InSlot;
+		E->Weight = Weight;
+		return E;
+	};
+
+	auto MakeWeapon = [](FName ID, const FString& Name, EWeaponType Type, EWeaponClass Class, float Weight)
+	{
+		UWeaponItem* W = NewObject<UWeaponItem>();
+		W->ItemID = ID;
+		W->DisplayName = FText::FromString(Name);
+		W->WeaponType = Type;
+		W->WeaponClass = Class;
+		W->Weight = Weight;
+		return W;
+	};
+
+	InventoryComp->AddItem(MakeEquipment(FName("BasicHelmet"), TEXT("Basic Helmet"), EEquipmentSlot::Head, 2.0f));
+	InventoryComp->AddItem(MakeEquipment(FName("BasicVest"), TEXT("Basic Vest"), EEquipmentSlot::Body, 1.5f));
+	InventoryComp->AddItem(MakeEquipment(FName("BasicShield"), TEXT("Basic Shield"), EEquipmentSlot::Shield, 3.0f));
+
+	InventoryComp->AddItem(MakeWeapon(FName("EnergyPistol"), TEXT("Energy Pistol"), EWeaponType::Energy, EWeaponClass::Pistol, 2.5f));
+	InventoryComp->AddItem(MakeWeapon(FName("CombatKnife"), TEXT("Combat Knife"), EWeaponType::Kinetic, EWeaponClass::MeleeBladed, 1.0f));
+
+	UConsumableItem* MedPack = NewObject<UConsumableItem>();
+	MedPack->ItemID = FName("MedPack");
+	MedPack->DisplayName = FText::FromString(TEXT("Med Pack"));
+	MedPack->ConsumableType = EConsumableType::Medical;
+	MedPack->Weight = 0.5f;
+	MedPack->MaxStackSize = 5;
+	InventoryComp->AddItem(MedPack, 3);
+
+	UItemBase* AmmoCell = NewObject<UItemBase>();
+	AmmoCell->ItemID = FName("AmmoCell");
+	AmmoCell->DisplayName = FText::FromString(TEXT("Ammo Cell"));
+	AmmoCell->Category = EItemCategory::Ammunition;
+	AmmoCell->Weight = 0.2f;
+	AmmoCell->MaxStackSize = 20;
+	InventoryComp->AddItem(AmmoCell, 10);
+
+	UConsumableItem* Rations = NewObject<UConsumableItem>();
+	Rations->ItemID = FName("RationPack");
+	Rations->DisplayName = FText::FromString(TEXT("Ration Pack"));
+	Rations->ConsumableType = EConsumableType::Food;
+	Rations->Weight = 0.3f;
+	Rations->MaxStackSize = 10;
+	InventoryComp->AddItem(Rations, 5);
 }
 
 void AFederationCharacter::TryLoadDefaultMesh()

@@ -2,6 +2,9 @@
 
 #include "Misc/AutomationTest.h"
 #include "UI/InventoryWidget.h"
+#include "UI/ItemTileWidget.h"
+#include "UI/EquipmentSlotWidget.h"
+#include "UI/ItemDragDropOperation.h"
 #include "Inventory/InventoryComponent.h"
 #include "Inventory/ItemBase.h"
 #include "Inventory/WeaponItem.h"
@@ -9,13 +12,14 @@
 #include "Inventory/ItemTypes.h"
 #include "Character/FederationCharacter.h"
 #include "Blueprint/UserWidget.h"
+#include "Blueprint/DragDropOperation.h"
 #include "Engine/World.h"
 #include "Tests/AutomationCommon.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
 // ---------------------------------------------------------------------------
-// Widget class
+// Widget classes exist
 // ---------------------------------------------------------------------------
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -29,6 +33,70 @@ bool FInventoryWidgetExists::RunTest(const FString& Parameters)
 	UClass* WidgetClass = UInventoryWidget::StaticClass();
 	TestNotNull("InventoryWidget class exists", WidgetClass);
 	TestTrue("Is a UUserWidget subclass", WidgetClass->IsChildOf(UUserWidget::StaticClass()));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FItemTileWidgetExists,
+	"FederationGame.UI.ItemTileWidget.ClassExists",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FItemTileWidgetExists::RunTest(const FString& Parameters)
+{
+	UClass* WidgetClass = UItemTileWidget::StaticClass();
+	TestNotNull("ItemTileWidget class exists", WidgetClass);
+	TestTrue("Is a UUserWidget subclass", WidgetClass->IsChildOf(UUserWidget::StaticClass()));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEquipmentSlotWidgetExists,
+	"FederationGame.UI.EquipmentSlotWidget.ClassExists",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FEquipmentSlotWidgetExists::RunTest(const FString& Parameters)
+{
+	UClass* WidgetClass = UEquipmentSlotWidget::StaticClass();
+	TestNotNull("EquipmentSlotWidget class exists", WidgetClass);
+	TestTrue("Is a UUserWidget subclass", WidgetClass->IsChildOf(UUserWidget::StaticClass()));
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Drag drop operation
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDragDropOpExists,
+	"FederationGame.UI.ItemDragDropOperation.ClassExists",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FDragDropOpExists::RunTest(const FString& Parameters)
+{
+	UClass* OpClass = UItemDragDropOperation::StaticClass();
+	TestNotNull("ItemDragDropOperation class exists", OpClass);
+	TestTrue("Is a UDragDropOperation subclass", OpClass->IsChildOf(UDragDropOperation::StaticClass()));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDragDropOpHoldsItem,
+	"FederationGame.UI.ItemDragDropOperation.HoldsItem",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FDragDropOpHoldsItem::RunTest(const FString& Parameters)
+{
+	UItemDragDropOperation* Op = NewObject<UItemDragDropOperation>();
+	TestNull("DraggedItem is null by default", Op->DraggedItem.Get());
+
+	UItemBase* Item = NewObject<UItemBase>();
+	Item->ItemID = FName("TestItem");
+	Op->DraggedItem = Item;
+	TestEqual("DraggedItem is set", Op->DraggedItem.Get(), Item);
 	return true;
 }
 

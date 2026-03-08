@@ -9,12 +9,14 @@
 
 class UInventoryComponent;
 class UTextBlock;
-class UVerticalBox;
 class UProgressBar;
+class UWrapBox;
+class UEquipmentSlotWidget;
 
 /**
  * Player-facing inventory panel (UMG).
- * Shows carried items, equipped gear, and weight.
+ * Left side: draggable item tiles in a grid.
+ * Right side: spatial equipment slots matching a character silhouette layout.
  * Toggled with Tab; shows mouse cursor while open.
  */
 UCLASS()
@@ -36,15 +38,15 @@ public:
 
 private:
 	void BuildWidgetTree();
-	void PopulateItems();
-	void PopulateEquipment();
+	void PopulateItemTiles();
+	void RefreshEquipmentSlots();
 	void UpdateWeightBar();
 
 	UPROPERTY()
 	TObjectPtr<UInventoryComponent> InventoryComp;
 
 	UPROPERTY()
-	TObjectPtr<UVerticalBox> ItemListBox;
+	TObjectPtr<UWrapBox> ItemGrid;
 
 	UPROPERTY()
 	TObjectPtr<UProgressBar> WeightBar;
@@ -53,5 +55,5 @@ private:
 	TObjectPtr<UTextBlock> WeightText;
 
 	UPROPERTY()
-	TMap<EEquipmentSlot, TObjectPtr<UTextBlock>> EquipmentSlotTexts;
+	TArray<TObjectPtr<UEquipmentSlotWidget>> EquipmentSlots;
 };
