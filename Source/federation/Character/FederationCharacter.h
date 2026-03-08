@@ -92,6 +92,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> JetpackBoostAction;
 
+	/** Toggle dev diagnostics overlay (` / tilde). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> ToggleDevHUDAction;
+
+	/** Toggle inventory panel (Tab). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> ToggleInventoryAction;
+
 	/** Toggle between first-person and third-person view. */
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	void ToggleViewMode();
@@ -145,6 +153,8 @@ public:
 	void OnJumpPressed();
 	void OnJumpReleased();
 	void OnJetpackBoostPressed();
+	void OnToggleDevHUD();
+	void OnToggleInventory();
 
 protected:
 

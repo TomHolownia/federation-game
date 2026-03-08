@@ -20,6 +20,8 @@
 #include "InputModifiers.h"
 #include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
+#include "Core/FederationHUD.h"
+#include "GameFramework/InputSettings.h"
 
 AFederationCharacter::AFederationCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -237,6 +239,7 @@ void AFederationCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 	// Possession (and thus SetupPlayerInputComponent) happens before BeginPlay, so ensure our
 	// runtime-created Enhanced Input actions + IMC exist before we attempt to bind them.
 	if (!DefaultMappingContext || !MoveForwardAction || !MoveRightAction || !JumpAction || !ViewToggleAction || !RollAction ||
+		!ToggleDevHUDAction || !ToggleInventoryAction ||
 		(!LookAction && (!LookYawAction || !LookPitchAction)))
 	{
 		CreateDefaultInputActionsAndContext();
@@ -272,6 +275,14 @@ void AFederationCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		if (JetpackBoostAction)
 		{
 			EIC->BindAction(JetpackBoostAction, ETriggerEvent::Started, this, &AFederationCharacter::OnJetpackBoostPressed);
+		}
+		if (ToggleDevHUDAction)
+		{
+			EIC->BindAction(ToggleDevHUDAction, ETriggerEvent::Started, this, &AFederationCharacter::OnToggleDevHUD);
+		}
+		if (ToggleInventoryAction)
+		{
+			EIC->BindAction(ToggleInventoryAction, ETriggerEvent::Started, this, &AFederationCharacter::OnToggleInventory);
 		}
 	}
 	else if (PlayerInputComponent)
@@ -476,6 +487,7 @@ void AFederationCharacter::SetupEnhancedInput()
 	if (!Subsystem) return;
 
 	if (!DefaultMappingContext || !MoveForwardAction || !MoveRightAction || !JumpAction || !RollAction ||
+		!ToggleDevHUDAction || !ToggleInventoryAction ||
 		(!LookAction && (!LookYawAction || !LookPitchAction)))
 	{
 		CreateDefaultInputActionsAndContext();
@@ -484,6 +496,12 @@ void AFederationCharacter::SetupEnhancedInput()
 	if (DefaultMappingContext)
 	{
 		Subsystem->AddMappingContext(DefaultMappingContext, 0);
+	}
+
+	// Free the tilde key from the console so it can drive the dev HUD toggle
+	if (UInputSettings* InputSettings = UInputSettings::GetInputSettings())
+	{
+		InputSettings->ConsoleKeys.Remove(EKeys::Tilde);
 	}
 }
 
@@ -530,6 +548,16 @@ void AFederationCharacter::CreateDefaultInputActionsAndContext()
 		JetpackBoostAction = NewObject<UInputAction>(this, FName(TEXT("IA_JetpackBoost_Default")));
 		JetpackBoostAction->ValueType = EInputActionValueType::Boolean;
 	}
+	if (!ToggleDevHUDAction)
+	{
+		ToggleDevHUDAction = NewObject<UInputAction>(this, FName(TEXT("IA_ToggleDevHUD_Default")));
+		ToggleDevHUDAction->ValueType = EInputActionValueType::Boolean;
+	}
+	if (!ToggleInventoryAction)
+	{
+		ToggleInventoryAction = NewObject<UInputAction>(this, FName(TEXT("IA_ToggleInventory_Default")));
+		ToggleInventoryAction->ValueType = EInputActionValueType::Boolean;
+	}
 
 	if (DefaultMappingContext) return;
 
@@ -549,6 +577,8 @@ void AFederationCharacter::CreateDefaultInputActionsAndContext()
 	FEnhancedActionKeyMapping& E = IMC->MapKey(RollAction, EKeys::E);
 	E.Modifiers.Add(NewObject<UInputModifierNegate>(this));
 	IMC->MapKey(JetpackBoostAction, EKeys::C);
+	IMC->MapKey(ToggleDevHUDAction, EKeys::Tilde);
+	IMC->MapKey(ToggleInventoryAction, EKeys::Tab);
 
 	DefaultMappingContext = IMC;
 }
@@ -655,6 +685,22 @@ void AFederationCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 	DeactivateJetpack();
+}
+
+void AFederationCharacter::OnToggleDevHUD()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+	AFederationHUD* HUD = Cast<AFederationHUD>(PC->GetHUD());
+	if (HUD) HUD->ToggleDevDiagnostics();
+}
+
+void AFederationCharacter::OnToggleInventory()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+	AFederationHUD* HUD = Cast<AFederationHUD>(PC->GetHUD());
+	if (HUD) HUD->ToggleInventory();
 }
 
 void AFederationCharacter::TryLoadDefaultMesh()
