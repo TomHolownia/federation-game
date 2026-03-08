@@ -325,7 +325,7 @@ bool FInventoryDelegateFires::RunTest(const FString& Parameters)
 {
 	UInventoryComponent* Inv = MakeInventory();
 	int32 CallCount = 0;
-	FDelegateHandle Handle = Inv->OnInventoryChanged.AddLambda([&CallCount]() { ++CallCount; });
+	Inv->OnNativeInventoryChanged.AddLambda([&CallCount]() { ++CallCount; });
 
 	UItemBase* Item = MakeItem();
 	Inv->AddItem(Item);
@@ -334,7 +334,6 @@ bool FInventoryDelegateFires::RunTest(const FString& Parameters)
 	Inv->RemoveItem(Item);
 	TestEqual(TEXT("Delegate should fire on remove"), CallCount, 2);
 
-	Inv->OnInventoryChanged.Remove(Handle);
 	return true;
 }
 

@@ -24,6 +24,7 @@ struct FInventoryEntry
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChanged);
+DECLARE_MULTICAST_DELEGATE(FOnNativeInventoryChanged);
 
 /**
  * Manages carried items and equipped gear.
@@ -86,10 +87,14 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
 	const TArray<FInventoryEntry>& GetItems() const { return Items; }
 
-	// --- Delegate ---
+	// --- Delegates ---
 
+	/** Blueprint-bindable delegate (for UI widgets, etc). */
 	UPROPERTY(BlueprintAssignable, Category = "Inventory")
 	FOnInventoryChanged OnInventoryChanged;
+
+	/** C++ native delegate (supports AddLambda, AddRaw, etc). */
+	FOnNativeInventoryChanged OnNativeInventoryChanged;
 
 	// --- State (public for testing) ---
 

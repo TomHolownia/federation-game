@@ -40,6 +40,7 @@ bool UInventoryComponent::AddItem(UItemBase* Item, int32 Count)
 	}
 
 	OnInventoryChanged.Broadcast();
+	OnNativeInventoryChanged.Broadcast();
 	return true;
 }
 
@@ -68,6 +69,7 @@ bool UInventoryComponent::RemoveItem(UItemBase* Item, int32 Count)
 	}
 
 	OnInventoryChanged.Broadcast();
+	OnNativeInventoryChanged.Broadcast();
 	return true;
 }
 
@@ -113,6 +115,7 @@ bool UInventoryComponent::EquipItem(UItemBase* Item)
 
 	EquippedItems.Add(TargetSlot, Item);
 	OnInventoryChanged.Broadcast();
+	OnNativeInventoryChanged.Broadcast();
 	return true;
 }
 
@@ -127,6 +130,7 @@ UItemBase* UInventoryComponent::UnequipSlot(EEquipmentSlot Slot)
 	UItemBase* Removed = *Found;
 	EquippedItems.Remove(Slot);
 	OnInventoryChanged.Broadcast();
+	OnNativeInventoryChanged.Broadcast();
 	return Removed;
 }
 

@@ -95,6 +95,10 @@ If CI becomes worthwhile later, options include:
 - Guard macro: `#if WITH_DEV_AUTOMATION_TESTS` / `#endif`
 - Tests compile into the editor target only (no separate test target).
 
+## 7. Gotchas
+
+- **New tests require an editor restart.** `IMPLEMENT_SIMPLE_AUTOMATION_TEST` registers tests via static initialisation. Live Coding (Ctrl+Alt+F11) can patch existing code but does not re-run static initialisers, so newly added tests will not appear in the Automation tab until you close and reopen the editor. If you add new test files or new `IMPLEMENT_SIMPLE_AUTOMATION_TEST` calls, do a full restart before running them.
+
 ---
 
 *See also: `ue5-project-setup.md` for project structure, `large-world-coordinates.md` for the LWC precision test.*
