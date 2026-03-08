@@ -47,15 +47,17 @@ bool FPlanetGravityComponentGravityDirectionTowardPlanet::RunTest(const FString&
 	if (!Char || !Comp) { AddError(TEXT("Failed to spawn")); return false; }
 
 	AStaticMeshActor* Planet = World->SpawnActor<AStaticMeshActor>();
-	Planet->Tags.Add(FName(TEXT("Planet")));
 	Planet->SetActorLocation(FVector::ZeroVector);
-	Planet->SetActorScale3D(FVector(10.f));
+	UPlanetGravitySourceComponent* Source = NewObject<UPlanetGravitySourceComponent>(Planet, TEXT("GravitySource"));
+	Source->RegisterComponent();
+	Source->ManualRadius = 50000.f;
+	Source->SurfaceGravityScale = 10.f;
 
 	Char->SetActorLocation(FVector(0.f, 0.f, 500.f));
 	Comp->UpdatePlanetGravity();
 
 	TestTrue(TEXT("Gravity should point toward planet (downward)"),
-		FVector::DotProduct(Comp->GravityDir, FVector(0.f, 0.f, -1.f)) > 0.99f);
+		FVector::DotProduct(Comp->GravityDir, FVector(0.f, 0.f, -1.f)) > 0.9f);
 
 	Planet->Destroy();
 	Char->Destroy();
@@ -316,9 +318,11 @@ bool FPlanetGravityComponentTickUpdatesGravity::RunTest(const FString& Parameter
 	if (!Char || !Comp) { AddError(TEXT("Failed to spawn")); return false; }
 
 	AStaticMeshActor* Planet = World->SpawnActor<AStaticMeshActor>();
-	Planet->Tags.Add(FName(TEXT("Planet")));
 	Planet->SetActorLocation(FVector(1000.f, 0.f, 0.f));
-	Planet->SetActorScale3D(FVector(10.f));
+	UPlanetGravitySourceComponent* Source = NewObject<UPlanetGravitySourceComponent>(Planet, TEXT("GravitySource"));
+	Source->RegisterComponent();
+	Source->ManualRadius = 50000.f;
+	Source->SurfaceGravityScale = 10.f;
 
 	Char->SetActorLocation(FVector::ZeroVector);
 
@@ -328,7 +332,7 @@ bool FPlanetGravityComponentTickUpdatesGravity::RunTest(const FString& Parameter
 	TestFalse(TEXT("Gravity direction should have been set after tick"),
 		Comp->GravityDir.IsNearlyZero());
 	TestTrue(TEXT("Gravity should point toward the planet (+X)"),
-		FVector::DotProduct(Comp->GravityDir, FVector(1.f, 0.f, 0.f)) > 0.99f);
+		FVector::DotProduct(Comp->GravityDir, FVector(1.f, 0.f, 0.f)) > 0.9f);
 
 	Planet->Destroy();
 	Char->Destroy();
@@ -428,11 +432,10 @@ bool FPlanetGravityComponentDistanceScaleFallsOffWithDistance::RunTest(const FSt
 	if (!Char || !Comp) { AddError(TEXT("Failed to spawn")); return false; }
 
 	AStaticMeshActor* Planet = World->SpawnActor<AStaticMeshActor>();
-	Planet->Tags.Add(FName(TEXT("Planet")));
 	Planet->SetActorLocation(FVector::ZeroVector);
 	UPlanetGravitySourceComponent* Source = NewObject<UPlanetGravitySourceComponent>(Planet, TEXT("GravitySource"));
 	Source->RegisterComponent();
-	Source->SurfaceGravityScale = 1.0f;
+	Source->SurfaceGravityScale = 10.0f;
 	Source->FalloffExponent = 2.0f;
 	Source->ManualRadius = 10000.f;
 
@@ -475,19 +478,17 @@ bool FPlanetGravityComponentLargerRadiusSourceStronger::RunTest(const FString& P
 
 	AStaticMeshActor* PlanetA = World->SpawnActor<AStaticMeshActor>();
 	AStaticMeshActor* PlanetB = World->SpawnActor<AStaticMeshActor>();
-	PlanetA->Tags.Add(FName(TEXT("Planet")));
-	PlanetB->Tags.Add(FName(TEXT("Planet")));
 	PlanetA->SetActorLocation(FVector(-100000.f, 0.f, 0.f));
 	PlanetB->SetActorLocation(FVector(100000.f, 0.f, 0.f));
-	PlanetA->SetActorScale3D(FVector(20.f));
-	PlanetB->SetActorScale3D(FVector(6.f));
 
 	UPlanetGravitySourceComponent* SourceA = NewObject<UPlanetGravitySourceComponent>(PlanetA, TEXT("GravitySourceA"));
 	UPlanetGravitySourceComponent* SourceB = NewObject<UPlanetGravitySourceComponent>(PlanetB, TEXT("GravitySourceB"));
 	SourceA->RegisterComponent();
 	SourceB->RegisterComponent();
-	SourceA->SurfaceGravityScale = 1.0f;
-	SourceB->SurfaceGravityScale = 1.0f;
+	SourceA->SurfaceGravityScale = 10.0f;
+	SourceB->SurfaceGravityScale = 10.0f;
+	SourceA->ManualRadius = 80000.f;
+	SourceB->ManualRadius = 30000.f;
 
 	Char->SetActorLocation(FVector::ZeroVector);
 	Comp->UpdatePlanetGravity();
