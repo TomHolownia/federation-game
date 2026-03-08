@@ -66,7 +66,7 @@ struct FPlanetTransitionProfile
 	float BaseStreamingRadiusMultiplier = 4.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
-	float BaseHandoffRadiusMultiplier = 1.05f;
+	float BaseHandoffRadiusMultiplier = 1.01f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
 	float MinStreamingRadiusMultiplier = 1.3f;
@@ -91,6 +91,10 @@ struct FPlanetTransitionProfile
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius")
 	float MaxAssumedApproachSpeed = 50000.f;
+
+	/** Multiplier of planet radius used to compute adaptive exit altitude. Effective exit = max(ExitAltitude, PlanetRadius * this). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Adaptive Radius", meta = (ClampMin = "0.01", ClampMax = "1.0"))
+	float ExitAltitudeMultiplier = 0.15f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transition|Blend")
 	float SurfaceBlendDurationSeconds = 0.8f;
@@ -126,13 +130,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
 	FString SurfaceLevelPath;
 
+	/** Direction from the planet center to the anchor point where the surface level center is placed.
+	 *  The level is geographically fixed: approaching from any direction maps to the correct surface XY
+	 *  via angular offset from this anchor. Default (0,0,1) = "north pole." */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
+	FVector SurfaceAnchorDirection = FVector::UpVector;
+
 	/**
 	 * Scale applied to the streamed surface level.
-	 * 1.0 = native level size. Reduce if the level extends beyond the planet sphere.
-	 * Each planet can override this in the Details panel.
+	 * 0 = auto-compute from planet radius and SurfaceLevelWorldExtent.
+	 * > 0 = explicit override. Reduce if the level extends beyond the planet sphere.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming", meta = (ClampMin = "0.001", ClampMax = "10.0"))
-	float SurfaceLevelScaleMultiplier = 1.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming", meta = (ClampMin = "0.0", ClampMax = "10.0"))
+	float SurfaceLevelScaleMultiplier = 0.f;
+
+	/** Half-extent of surface level content in UU at scale 1.0. Used by auto-scale (SurfaceLevelScaleMultiplier == 0). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming", meta = (ClampMin = "100.0"))
+	float SurfaceLevelWorldExtent = 500000.f;
+
+	/** Fraction of planet radius the surface level patch should cover. Used by auto-scale. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming", meta = (ClampMin = "0.01", ClampMax = "1.0"))
+	float DesiredPatchFraction = 0.05f;
 
 	/** Distance from planet center at which streaming begins. Should be greater than the planet's visual radius (e.g. SmallPlanet PlanetRadius 100000 → sphere radius 100000; use StreamingRadius 200000 so load starts while approaching). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
@@ -257,6 +275,8 @@ public:
 
 	float GetPlanetRadiusFromOwner() const;
 	float GetEffectiveHandoffRadius() const;
+	float GetEffectiveExitAltitude() const;
+	float ComputeAutoSurfaceLevelScale() const;
 	float GetEffectiveFadeStartRadius() const;
 	float GetEffectiveFullFadeRadius() const;
 	float ComputeRevealProgress(float DistanceToPlayer) const;
