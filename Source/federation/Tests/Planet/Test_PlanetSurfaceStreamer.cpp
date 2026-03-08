@@ -647,6 +647,7 @@ bool FPlanetStreamerExplicitHandoffOverride::RunTest(const FString& Parameters)
 
 	Comp->HandoffRadius = 150000.f;
 	Comp->TransitionProfile.bUseExplicitRadiiOverrides = true;
+	Comp->ExitAltitude = 100000.f;
 
 	TestTrue(TEXT("Explicit override returns HandoffRadius"),
 		FMath::IsNearlyEqual(Comp->GetEffectiveHandoffRadius(), 150000.f, 1.f));
@@ -1875,6 +1876,280 @@ bool FPlanetStreamerForwardPriorityBlendMovesUpTowardTarget::RunTest(const FStri
 	const float DotHigh = FVector::DotProduct(UpHigh, TargetUpProjected);
 	TestTrue(TEXT("Higher alpha should move up-vector closer to target up"), DotHigh > DotLow);
 
+	return true;
+}
+
+// ===========================================================================
+// FED-048: TDD tests for planet streaming fixes
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// 52. Effective exit altitude scales with planet radius
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerExitAltitudeScalesWithRadius,
+	"FederationGame.Planet.PlanetSurfaceStreamer.EffectiveExitAltitudeScalesWithPlanetRadius",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerExitAltitudeScalesWithRadius::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, 1100000.f);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	const float EffectiveExit = Comp->GetEffectiveExitAltitude();
+
+	TestTrue(TEXT("Effective exit altitude for large planet should exceed fixed default of 50000"),
+		EffectiveExit > 50000.f);
+	TestTrue(TEXT("Effective exit altitude should scale with planet radius (expect > 100000 for R=1.1M)"),
+		EffectiveExit > 100000.f);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 53. Handoff altitude always below exit altitude (various planet sizes)
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerHandoffBelowExitAltitude,
+	"FederationGame.Planet.PlanetSurfaceStreamer.HandoffAltitudeAlwaysBelowExitAltitude",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerHandoffBelowExitAltitude::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float Radii[] = { 10000.f, 50000.f, 100000.f, 500000.f, 1100000.f, 5000000.f };
+	for (float R : Radii)
+	{
+		UPlanetSurfaceStreamer* Comp = nullptr;
+		AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, R);
+		if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); continue; }
+
+		const float HandoffR = Comp->GetEffectiveHandoffRadius();
+		const float HandoffAltitude = HandoffR - R;
+		const float ExitAlt = Comp->GetEffectiveExitAltitude();
+
+		TestTrue(FString::Printf(TEXT("R=%.0f: handoff altitude (%.0f) < exit altitude (%.0f)"), R, HandoffAltitude, ExitAlt),
+			HandoffAltitude < ExitAlt);
+
+		Actor->Destroy();
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 54. No immediate stream-out after handoff
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerNoImmediateStreamOutAfterHandoff,
+	"FederationGame.Planet.PlanetSurfaceStreamer.NoImmediateStreamOutAfterHandoff",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerNoImmediateStreamOutAfterHandoff::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float Radii[] = { 100000.f, 500000.f, 1100000.f, 5000000.f };
+	for (float R : Radii)
+	{
+		UPlanetSurfaceStreamer* Comp = nullptr;
+		AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, R);
+		if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); continue; }
+
+		const float HandoffR = Comp->GetEffectiveHandoffRadius();
+		const float HandoffAltitude = HandoffR - R;
+
+		const FVector SurfaceOrigin = FVector::ZeroVector;
+		const FVector PlayerAtHandoff = FVector(0.f, 0.f, HandoffAltitude);
+
+		TestFalse(FString::Printf(TEXT("R=%.0f: ShouldStreamOut should be false at handoff altitude %.0f"), R, HandoffAltitude),
+			Comp->ShouldStreamOut(PlayerAtHandoff, SurfaceOrigin));
+
+		Actor->Destroy();
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 55. Large planet (Terra Nova) handoff does not exceed exit altitude
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerLargePlanetHandoffSafe,
+	"FederationGame.Planet.PlanetSurfaceStreamer.LargePlanetHandoffDoesNotExceedExitAltitude",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerLargePlanetHandoffSafe::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float TerraNovaRadius = 1100000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, TerraNovaRadius);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	const float HandoffR = Comp->GetEffectiveHandoffRadius();
+	const float HandoffAlt = HandoffR - TerraNovaRadius;
+	const float ExitAlt = Comp->GetEffectiveExitAltitude();
+
+	TestTrue(FString::Printf(TEXT("Terra Nova: handoff alt %.0f < exit alt %.0f"), HandoffAlt, ExitAlt),
+		HandoffAlt < ExitAlt);
+
+	const FVector SurfaceOrigin = FVector::ZeroVector;
+	const FVector PlayerAtHandoff = FVector(0.f, 0.f, HandoffAlt);
+	TestFalse(TEXT("Terra Nova: ShouldStreamOut at handoff altitude should be false"),
+		Comp->ShouldStreamOut(PlayerAtHandoff, SurfaceOrigin));
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 56. Streaming radii invariants: streaming > handoff > planet radius
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerRadiiInvariantsHold,
+	"FederationGame.Planet.PlanetSurfaceStreamer.StreamingRadiiInvariantsHold",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerRadiiInvariantsHold::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float Radii[] = { 10000.f, 100000.f, 500000.f, 1100000.f, 5000000.f };
+	for (float R : Radii)
+	{
+		UPlanetSurfaceStreamer* Comp = nullptr;
+		AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, R);
+		if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); continue; }
+
+		const float StreamR = Comp->GetEffectiveStreamingRadius();
+		const float HandoffR = Comp->GetEffectiveHandoffRadius();
+
+		TestTrue(FString::Printf(TEXT("R=%.0f: streaming (%.0f) > handoff (%.0f)"), R, StreamR, HandoffR),
+			StreamR > HandoffR);
+		TestTrue(FString::Printf(TEXT("R=%.0f: handoff (%.0f) > planet radius (%.0f)"), R, HandoffR, R),
+			HandoffR > R);
+
+		Actor->Destroy();
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 57. Auto-scale produces reasonable value
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerAutoScaleReasonable,
+	"FederationGame.Planet.PlanetSurfaceStreamer.AutoScaleProducesReasonableValue",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerAutoScaleReasonable::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float R = 1100000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	Comp->SurfaceLevelScaleMultiplier = 0.f;
+	const float Scale = Comp->ComputeAutoSurfaceLevelScale();
+
+	TestTrue(TEXT("Auto-scale should be positive"), Scale > 0.f);
+	TestTrue(TEXT("Auto-scale should be less than 1.0 for large planet with default level extent"),
+		Scale < 1.f);
+	TestTrue(TEXT("Auto-scale should be reasonable (> 0.01)"), Scale > 0.01f);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 58. Auto-scale scales with planet radius
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerAutoScaleScalesWithRadius,
+	"FederationGame.Planet.PlanetSurfaceStreamer.AutoScaleScalesWithPlanetRadius",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerAutoScaleScalesWithRadius::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	UPlanetSurfaceStreamer* CompSmall = nullptr;
+	UPlanetSurfaceStreamer* CompLarge = nullptr;
+	AActor* Small = SpawnPlanetWithStreamer(World, CompSmall, FVector::ZeroVector, 100000.f);
+	AActor* Large = SpawnPlanetWithStreamer(World, CompLarge, FVector(5000000, 0, 0), 1100000.f);
+	if (!Small || !CompSmall || !Large || !CompLarge) { AddError(TEXT("Spawn failed")); return false; }
+
+	CompSmall->SurfaceLevelScaleMultiplier = 0.f;
+	CompLarge->SurfaceLevelScaleMultiplier = 0.f;
+	const float ScaleSmall = CompSmall->ComputeAutoSurfaceLevelScale();
+	const float ScaleLarge = CompLarge->ComputeAutoSurfaceLevelScale();
+
+	TestTrue(TEXT("Larger planet should produce larger auto-scale"), ScaleLarge > ScaleSmall);
+
+	Small->Destroy();
+	Large->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 59. Exit altitude multiplier override works
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerExitAltMultiplierOverride,
+	"FederationGame.Planet.PlanetSurfaceStreamer.ExitAltitudeMultiplierOverrideWorks",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerExitAltMultiplierOverride::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float R = 1000000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	Comp->TransitionProfile.ExitAltitudeMultiplier = 0.25f;
+	const float ExitAlt = Comp->GetEffectiveExitAltitude();
+	TestTrue(TEXT("Custom exit alt multiplier should produce R * 0.25 = 250000"),
+		FMath::IsNearlyEqual(ExitAlt, 250000.f, 1000.f));
+
+	Comp->TransitionProfile.ExitAltitudeMultiplier = 0.05f;
+	const float ExitAlt2 = Comp->GetEffectiveExitAltitude();
+	TestTrue(TEXT("Smaller multiplier should produce smaller exit alt"),
+		ExitAlt2 < ExitAlt);
+
+	Actor->Destroy();
 	return true;
 }
 

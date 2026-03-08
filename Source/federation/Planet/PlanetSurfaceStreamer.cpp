@@ -113,22 +113,66 @@ float UPlanetSurfaceStreamer::GetPlanetRadiusFromOwner() const
 
 float UPlanetSurfaceStreamer::GetEffectiveHandoffRadius() const
 {
-	if (TransitionProfile.bUseExplicitRadiiOverrides && HandoffRadius > 0.f) return HandoffRadius;
-
-	if (TransitionProfile.bUseAdaptiveRadii)
+	float Result;
+	if (TransitionProfile.bUseExplicitRadiiOverrides && HandoffRadius > 0.f)
+	{
+		Result = HandoffRadius;
+	}
+	else if (TransitionProfile.bUseAdaptiveRadii)
 	{
 		const float PlanetRadius = GetPlanetRadiusFromOwner();
 		if (PlanetRadius > 0.f)
 		{
-			return ComputeAdaptiveHandoffRadius(PlanetRadius, GetPlayerApproachSpeedTowardPlanet());
+			Result = ComputeAdaptiveHandoffRadius(PlanetRadius, GetPlayerApproachSpeedTowardPlanet());
+		}
+		else
+		{
+			Result = 100000.f;
+		}
+	}
+	else
+	{
+		const float PlanetRadius = GetPlanetRadiusFromOwner();
+		if (PlanetRadius <= 0.f)
+		{
+			Result = 100000.f;
+		}
+		else
+		{
+			const float Margin = FMath::Max(500.f, PlanetRadius * 0.05f);
+			Result = PlanetRadius + Margin;
 		}
 	}
 
+	// Guard: ensure handoff altitude never exceeds 80% of effective exit altitude.
 	const float PlanetRadius = GetPlanetRadiusFromOwner();
-	if (PlanetRadius <= 0.f) return 100000.f;
-	// Add margin so we trigger when at the surface (player center can be slightly outside radius when standing on the sphere).
-	const float Margin = FMath::Max(500.f, PlanetRadius * 0.05f);
-	return PlanetRadius + Margin;
+	if (PlanetRadius > 0.f)
+	{
+		const float EffectiveExit = GetEffectiveExitAltitude();
+		const float MaxHandoffAlt = EffectiveExit * 0.8f;
+		const float MaxHandoffRadius = PlanetRadius + MaxHandoffAlt;
+		Result = FMath::Min(Result, MaxHandoffRadius);
+	}
+
+	return Result;
+}
+
+float UPlanetSurfaceStreamer::GetEffectiveExitAltitude() const
+{
+	const float PlanetRadius = GetPlanetRadiusFromOwner();
+	const float AdaptiveAlt = PlanetRadius * FMath::Max(0.01f, TransitionProfile.ExitAltitudeMultiplier);
+	return FMath::Max(ExitAltitude, AdaptiveAlt);
+}
+
+float UPlanetSurfaceStreamer::ComputeAutoSurfaceLevelScale() const
+{
+	const float PlanetRadius = GetPlanetRadiusFromOwner();
+	if (PlanetRadius <= 0.f) return 1.f;
+
+	const float SafeExtent = FMath::Max(100.f, SurfaceLevelWorldExtent);
+	const float SafePatch = FMath::Clamp(DesiredPatchFraction, 0.01f, 1.f);
+	const float DesiredPatchRadius = PlanetRadius * SafePatch;
+	return FMath::Clamp(DesiredPatchRadius / SafeExtent, 0.01f, 10.f);
 }
 
 bool UPlanetSurfaceStreamer::ShouldStreamIn(float DistanceSq) const
@@ -312,11 +356,9 @@ void UPlanetSurfaceStreamer::SetPlanetFadeAlpha(float Alpha)
 
 bool UPlanetSurfaceStreamer::ShouldStreamOut(const FVector& PlayerLocation, const FVector& SurfaceOrigin) const
 {
-	// Use only vertical (Z) offset so lateral movement over hills doesn't trigger stream-out.
-	// The surface level uses Z-up; distance from origin in X/Y is lateral, not altitude.
 	const FVector Offset = PlayerLocation - SurfaceOrigin;
 	const float AltitudeAboveSurface = Offset.Z;
-	return AltitudeAboveSurface > ExitAltitude;
+	return AltitudeAboveSurface > GetEffectiveExitAltitude();
 }
 
 void UPlanetSurfaceStreamer::SaveSpacePosition(const FVector& Location, const FRotator& Rotation)
@@ -536,7 +578,8 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 	// approach point. This allows correct north-pole / south-pole / equator streaming: fly in
 	// at any point and the level loads with horizon aligned to that patch.
 	const FRotator LevelRotation = FRotationMatrix::MakeFromXY(TangentX, TangentY).Rotator();
-	const FVector Scale3D(SurfaceLevelScaleMultiplier);
+	const float EffectiveScale = (SurfaceLevelScaleMultiplier > 0.f) ? SurfaceLevelScaleMultiplier : ComputeAutoSurfaceLevelScale();
+	const FVector Scale3D(EffectiveScale);
 	const FTransform LevelTransform(FQuat(LevelRotation), LevelLoadLocation, Scale3D);
 
 	const FSoftObjectPath LevelPath(SurfaceLevelPath);
@@ -557,7 +600,7 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 		TimeSinceStreamOut = StreamOutReentryCooldownSeconds; // Allow immediate transition on first approach.
 		LoadingStartTime = World ? World->GetTimeSeconds() : 0.f;
 		// Game state (Loading/level name) is set in UpdateLoadingState only when close, so HUD shows "Deep Space" when far
-		UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: === STREAM START === level='%s' at surface pos (%.0f, %.0f, %.0f), planet radius=%.0f, scale=%.3f"), *SurfaceLevelPath, LevelLoadLocation.X, LevelLoadLocation.Y, LevelLoadLocation.Z, PlanetRadius, SurfaceLevelScaleMultiplier);
+		UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: === STREAM START === level='%s' at surface pos (%.0f, %.0f, %.0f), planet radius=%.0f, scale=%.3f (auto=%s), exitAlt=%.0f"), *SurfaceLevelPath, LevelLoadLocation.X, LevelLoadLocation.Y, LevelLoadLocation.Z, PlanetRadius, EffectiveScale, SurfaceLevelScaleMultiplier <= 0.f ? TEXT("yes") : TEXT("no"), GetEffectiveExitAltitude());
 	}
 	else
 	{
