@@ -40,6 +40,16 @@ APlanet::APlanet(const FObjectInitializer& ObjectInitializer)
 	}
 }
 
+void APlanet::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	if (WaypointComp && !PlanetName.IsEmpty())
+	{
+		WaypointComp->DisplayName = PlanetName;
+	}
+}
+
 #if WITH_EDITOR
 void APlanet::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {

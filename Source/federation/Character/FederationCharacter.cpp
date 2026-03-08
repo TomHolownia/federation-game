@@ -216,10 +216,13 @@ void AFederationCharacter::Tick(float DeltaSeconds)
 
 	bJetpackActive = IsJetpackEnabled();
 
-	if (AFederationGameState* GS = GetWorld() ? GetWorld()->GetGameState<AFederationGameState>() : nullptr)
+	if (IsPlayerControlled())
 	{
-		GS->DebugJetpackEnabled = bJetpackActive;
-		GS->DebugJetpackBoost = bJetpackActive && JetpackComponent && JetpackComponent->IsBoostEnabled();
+		if (AFederationGameState* GS = GetWorld() ? GetWorld()->GetGameState<AFederationGameState>() : nullptr)
+		{
+			GS->DebugJetpackEnabled = bJetpackActive;
+			GS->DebugJetpackBoost = bJetpackActive && JetpackComponent && JetpackComponent->IsBoostEnabled();
+		}
 	}
 }
 
