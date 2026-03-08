@@ -99,6 +99,25 @@ If CI becomes worthwhile later, options include:
 
 - **New tests require an editor restart.** `IMPLEMENT_SIMPLE_AUTOMATION_TEST` registers tests via static initialisation. Live Coding (Ctrl+Alt+F11) can patch existing code but does not re-run static initialisers, so newly added tests will not appear in the Automation tab until you close and reopen the editor. If you add new test files or new `IMPLEMENT_SIMPLE_AUTOMATION_TEST` calls, do a full restart before running them.
 
+## 8. Live Coding vs Full Rebuild
+
+UE5 Live Coding (Ctrl+Alt+F11) patches running code in-place. It is fast but has limits. Use this table to decide whether a change can be live-coded or needs a full editor restart / rebuild.
+
+**Live Coding works for:**
+- Changing values in existing function bodies (constants, colours, sizes, logic)
+- Modifying existing function implementations (new branches, bug fixes)
+- Adding or changing code inside existing `.cpp` files (as long as no new UHT-reflected types are introduced)
+
+**Live Coding does NOT work for (requires editor restart):**
+- Adding new `UCLASS`, `USTRUCT`, or `UENUM` types (UHT must re-run)
+- Adding new `UPROPERTY` or `UFUNCTION` members to existing classes (UHT reflection)
+- Adding new `.h` or `.cpp` files (build system must discover them)
+- Adding new `IMPLEMENT_SIMPLE_AUTOMATION_TEST` calls (static initialisers don't re-run)
+- Changing `.Build.cs` module dependencies
+- Changing class hierarchy (reparenting)
+
+**Rule of thumb:** if the change only touches code *inside* existing function bodies in `.cpp` files, Live Coding will handle it. If the change touches headers, adds files, or introduces new reflected types, do a full rebuild with the editor closed.
+
 ---
 
 *See also: `ue5-project-setup.md` for project structure, `large-world-coordinates.md` for the LWC precision test.*
