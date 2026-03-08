@@ -1,18 +1,75 @@
 # Destructible Buildings
 
-How building destruction works in Federation: Chaos Destruction on modular kit pieces, CPU budgeting, and phased implementation.
+How building destruction works in Federation: rechargeable shields, Chaos Destruction on modular kit pieces, CPU budgeting, and phased implementation.
 
 ---
 
 ## 1. Goal
 
-Buildings assembled from modular kit pieces (see `docs/technical/modular-building-architecture.md`) should be destructible during combat. Weapons fire, explosions, and vehicle impacts can damage and destroy individual building pieces, and sufficient structural damage can cause floor collapse.
+Buildings assembled from modular kit pieces (see `docs/technical/modular-building-architecture.md`) should be destructible during combat. Weapons fire, explosions, and vehicle impacts must first deplete a building's rechargeable shield before structural damage begins. Once shields are down, individual building pieces can be damaged and destroyed, and sufficient structural damage can cause floor collapse.
 
-**CPU constraint:** Real-time physics destruction is expensive. The system must enforce strict CPU limits so that destruction enhances gameplay without tanking frame rate, even during large battles in dense cities.
+**CPU constraint:** Real-time physics destruction is expensive. The system must enforce strict CPU limits so that destruction enhances gameplay without tanking frame rate, even during large battles in dense cities. Shields serve as a natural throttle on the destruction queue -- buildings absorb sustained fire before any Chaos physics is triggered.
+
+**Scope:** Destruction applies to **buildings and structures only**. Landscape terrain is not destructible (see section 8).
 
 ---
 
-## 2. Approach: Chaos Destruction on modular pieces
+## 2. Rechargeable shields
+
+All military assets in the Federation universe have rechargeable energy shields. Buildings are no exception -- every building has a shield that must be depleted before structural damage can occur.
+
+### How building shields work
+
+- **Shield health pool.** Each building has a shield with a configurable maximum HP. Shield HP scales with building importance: a military bunker has far more shield capacity than a coffee shop.
+- **Damage absorption.** While the shield is active, all incoming damage is applied to the shield HP, not to the building structure. No kit pieces take damage, no destruction is triggered, no Chaos physics runs.
+- **Visual feedback.** Shield hits produce a visual effect (ripple/flash on the shield surface, colour shift from blue/green toward red as HP drops). This tells the player the building is shielded and how close the shield is to failing.
+- **Shield break.** When shield HP reaches zero, the shield drops with a visible collapse effect (shatter/flicker). From this point, all damage goes directly to building structure and the destruction system (sections 3--6) takes over.
+- **Recharge.** If the building stops taking damage for a configurable duration (e.g. 10--30 seconds), the shield begins recharging. Recharge rate and delay are per-building properties. A shield that fully recharges means the attacker must sustain pressure or start over.
+- **No partial structural protection.** Shields are all-or-nothing for a building. While the shield is up, the entire building is protected. There is no per-wall or per-floor shielding (this keeps the system simple and readable for the player).
+
+### Why shields help performance
+
+Shields are a **natural destruction budget throttle**:
+
+- A city under bombardment doesn't immediately generate hundreds of Chaos destruction events. Most buildings are absorbing damage on their shields -- zero physics cost.
+- Only buildings whose shields have actually failed enter the destruction pipeline. In a typical battle, this might be a handful at any given time, well within the destruction budget.
+- Shield recharge means buildings cycle back to the protected state if the attacker shifts focus, further reducing the number of active destruction targets.
+
+### Shield properties
+
+| Property | Description | Example values |
+|----------|-------------|---------------|
+| **MaxShieldHP** | Total shield capacity | 500 (shop), 2000 (apartment), 10000 (military) |
+| **RechargeDelay** | Seconds after last hit before recharge starts | 10--30s |
+| **RechargeRate** | HP per second during recharge | 50--200 HP/s |
+| **ShieldMaterial** | Material instance for the shield effect | Translucent, fresnel-based, colour-keyed to HP |
+
+### Shared shield component
+
+Since all military assets (characters, vehicles, ships, turrets, buildings) use rechargeable shields, the shield should be a shared `UShieldComponent` that attaches to any actor. Buildings, soldiers, and vehicles all use the same component with different HP/recharge values. This avoids duplicating shield logic across systems.
+
+---
+
+## 3. Damage pipeline summary
+
+The full damage pipeline for a building, from first hit to rubble:
+
+```
+Incoming damage
+  --> Shield absorbs (no structural effect, shield VFX)
+  --> Shield breaks (shield-down VFX)
+  --> Structural damage begins
+  --> Material-driven scuffs (DamageLevel param)
+  --> Damage-state mesh swap (Intact --> Damaged)
+  --> Chaos destruction (Damaged --> Shattered/Destroyed)
+  --> Structural integrity check --> possible floor collapse
+```
+
+Shields ensure only the right-hand side of this pipeline costs significant CPU, and only for buildings that are actively under sustained fire.
+
+---
+
+## 4. Approach: Chaos Destruction on modular pieces
 
 UE5's **Chaos Destruction** system (Geometry Collections) is the foundation. Each modular kit piece can be fractured into debris chunks that simulate physics when destroyed.
 
@@ -39,7 +96,7 @@ At runtime, when a kit piece takes enough damage, the Static Mesh actor is repla
 
 ---
 
-## 3. CPU budget and limits
+## 5. CPU budget and limits
 
 ### The problem
 
@@ -80,7 +137,7 @@ The player sees buildings taking damage either way; the fidelity of the destruct
 
 ---
 
-## 4. Damage-state system (cheap alternative)
+## 6. Damage-state system (cheap alternative)
 
 Every kit piece has up to three mesh variants:
 
@@ -103,11 +160,11 @@ For lighter damage that doesn't warrant a mesh swap, the kit piece's material ca
 - **DamageLevel** (0--1): drives crack overlay, colour darkening, emissive flickering.
 - **ScorchMask**: a runtime-projected decal showing blast patterns.
 
-This gives a spectrum: pristine --> scuffed (material) --> cracked (damaged mesh) --> shattered (Chaos) --> rubble/gone.
+This gives a full spectrum: shielded --> pristine --> scuffed (material) --> cracked (damaged mesh) --> shattered (Chaos) --> rubble/gone.
 
 ---
 
-## 5. Structural integrity and floor collapse
+## 7. Structural integrity and floor collapse
 
 ### The concept
 
@@ -137,7 +194,37 @@ This is a gameplay system, not an engineering simulation. It's predictable, desi
 
 ---
 
-## 6. Networking considerations (future)
+## 8. Landscape is not destructible
+
+Destruction is scoped to **buildings and structures only**. The landscape terrain itself is never deformed, cratered, or removed by weapons fire. UE5 Landscape runtime deformation is expensive, difficult to replicate in multiplayer, and hard to undo -- it would create permanent, accumulating performance and visual debt across a long play session.
+
+### What does happen to terrain
+
+Heavy weapons fire hitting the ground produces **visual-only effects** that persist for the duration of the battle or session:
+
+- **Crater decals.** Large projected decals (circular scorch/crater texture) placed at the impact point. These are flat projections on the existing terrain -- no geometry change. They fade or are cleaned up after the battle ends or when the player leaves the area.
+- **Blast mark decals.** Smaller scorch and burn marks from explosions, weapons fire, and debris impacts. Same decal approach.
+- **Particle effects.** Dirt/dust kicked up on impact, lingering smoke for large hits. These are transient and self-clean.
+
+### Decal budget
+
+Decals are cheap individually but can accumulate. A decal manager limits the total count:
+
+| Parameter | Recommended default | Purpose |
+|-----------|-------------------|---------|
+| **MaxTerrainDecals** | 200--500 | Total crater/blast decals in the world. When exceeded, oldest decals fade out. |
+| **DecalLifetime** | 300--600 seconds | Decals fade after this duration even if under budget. |
+
+### Why not terrain destruction
+
+- **Performance:** Runtime Landscape heightmap modification is GPU-expensive and doesn't batch well.
+- **Persistence:** Deformed terrain must be saved/replicated. Over a long session or multiplayer match, accumulated deformation becomes unmanageable.
+- **Gameplay:** Terrain craters would interfere with navigation, vehicle pathing, and building placement in ways that are hard to control. Decals give the visual impact of a battlefield without the gameplay side-effects.
+- **Scope:** The destruction system is complex enough with buildings. Adding terrain deformation would significantly increase implementation and testing effort for marginal gameplay benefit.
+
+---
+
+## 9. Networking considerations (future)
 
 For multiplayer, destruction state must replicate:
 
@@ -149,20 +236,22 @@ This is future work and not needed for the initial implementation.
 
 ---
 
-## 7. Implementation phases
+## 10. Implementation phases
 
 | Phase | Work | Depends on |
 |-------|------|-----------|
-| **1 -- Damage states** | Add Intact/Damaged/Destroyed mesh variants for 3--5 core kit pieces. Implement mesh swap on damage. Test with a weapon hitting a wall. | Modular building kit (Phase 1 from building architecture doc) |
-| **2 -- Chaos destruction** | Create Geometry Collections for core kit pieces. Implement the destruction budget manager. Test Chaos shattering within budget limits on a single building. Profile CPU. | Phase 1 |
-| **3 -- Distance tiering** | Implement DestructionRadius-based tiering: full Chaos near, damage-state swap far. Test in a 50-building city with an explosion. | Phase 2 |
-| **4 -- Structural integrity** | Add per-floor structural tracking. Implement collapse trigger and sequence. Test: destroy enough walls on a floor, watch the floor above collapse. | Phase 2 |
-| **5 -- Scale and budget tuning** | Test in a 200+ building city battle scenario. Tune all budget parameters. Implement dynamic fallback under frame pressure. Profile extensively. | Phases 3, 4 |
-| **6 -- Polish** | Particle effects (dust, sparks, fire), sound design, screen shake. Debris material variation (concrete chunks vs metal shards based on kit piece type). | Phase 5 |
+| **1 -- Shield component** | Implement `UShieldComponent` (shared across buildings, vehicles, characters). HP, recharge delay, recharge rate, shield-hit VFX, shield-break VFX. Test on a single building: shoot until shield drops. | Modular building kit (Phase 1 from building architecture doc) |
+| **2 -- Damage states** | Add Intact/Damaged/Destroyed mesh variants for 3--5 core kit pieces. Implement mesh swap on damage (only applies after shield is down). Test with a weapon hitting an unshielded wall. | Phase 1 |
+| **3 -- Chaos destruction** | Create Geometry Collections for core kit pieces. Implement the destruction budget manager. Test Chaos shattering within budget limits on a single building. Profile CPU. | Phase 2 |
+| **4 -- Terrain decals** | Implement crater and blast mark decal system with decal budget manager. Test with heavy weapons on open terrain. | -- |
+| **5 -- Distance tiering** | Implement DestructionRadius-based tiering: full Chaos near, damage-state swap far. Test in a 50-building city with an explosion. | Phase 3 |
+| **6 -- Structural integrity** | Add per-floor structural tracking. Implement collapse trigger and sequence. Test: destroy enough walls on a floor, watch the floor above collapse. | Phase 3 |
+| **7 -- Scale and budget tuning** | Test in a 200+ building city battle scenario. Tune all budget parameters (destruction + shield + decal). Implement dynamic fallback under frame pressure. Profile extensively. | Phases 5, 6 |
+| **8 -- Polish** | Particle effects (dust, sparks, fire), sound design, screen shake. Debris material variation (concrete chunks vs metal shards based on kit piece type). Shield VFX polish. | Phase 7 |
 
 ---
 
-## 8. References
+## 11. References
 
 - [Chaos Destruction Overview](https://dev.epicgames.com/documentation/en-us/unreal-engine/chaos-destruction-overview-in-unreal-engine)
 - [Geometry Collections](https://dev.epicgames.com/documentation/en-us/unreal-engine/geometry-collections-in-unreal-engine)
