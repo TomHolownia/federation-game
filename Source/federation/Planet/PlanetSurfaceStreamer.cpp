@@ -166,13 +166,14 @@ float UPlanetSurfaceStreamer::GetEffectiveExitAltitude() const
 
 float UPlanetSurfaceStreamer::ComputeAutoSurfaceLevelScale() const
 {
+	constexpr float MinAutoScale = 0.005f;
 	const float PlanetRadius = GetPlanetRadiusFromOwner();
 	if (PlanetRadius <= 0.f) return 1.f;
 
 	const float SafeExtent = FMath::Max(100.f, SurfaceLevelWorldExtent);
 	const float SafePatch = FMath::Clamp(DesiredPatchFraction, 0.01f, 1.f);
 	const float DesiredPatchRadius = PlanetRadius * SafePatch;
-	return FMath::Clamp(DesiredPatchRadius / SafeExtent, 0.01f, 10.f);
+	return FMath::Clamp(DesiredPatchRadius / SafeExtent, MinAutoScale, 10.f);
 }
 
 bool UPlanetSurfaceStreamer::ShouldStreamIn(float DistanceSq) const
@@ -563,20 +564,15 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 	const FVector PlanetCenter = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
 	const float PlanetRadius = GetPlanetRadiusFromOwner();
 
-	// Place the level at the planet's surface facing the player so the terrain
-	// renders IN FRONT of the planet sphere during approach.
-	FVector LevelLoadLocation = PlanetCenter;
-	if (PlayerPawn && PlanetRadius > 0.f)
-	{
-		const FVector ToPlayer = (PlayerPawn->GetActorLocation() - PlanetCenter).GetSafeNormal();
-		LevelLoadLocation = PlanetCenter + ToPlayer * PlanetRadius;
-	}
+	// Place the level at a fixed geographic anchor on the planet surface.
+	// The coordinate mapping (SpaceToSurfacePosition) handles routing any
+	// approach direction to the correct XY position on this fixed level.
+	const FVector AnchorDir = SurfaceAnchorDirection.GetSafeNormal();
+	const FVector LevelLoadLocation = (PlanetRadius > 0.f && !AnchorDir.IsNearlyZero())
+		? PlanetCenter + AnchorDir * PlanetRadius
+		: PlanetCenter;
 	SurfaceLevelWorldOrigin = LevelLoadLocation;
 	ComputeTangentFrame(PlanetCenter);
-
-	// Orient the streamed level so its local Z (up) matches the planet surface normal at this
-	// approach point. This allows correct north-pole / south-pole / equator streaming: fly in
-	// at any point and the level loads with horizon aligned to that patch.
 	const FRotator LevelRotation = FRotationMatrix::MakeFromXY(TangentX, TangentY).Rotator();
 	const float EffectiveScale = (SurfaceLevelScaleMultiplier > 0.f) ? SurfaceLevelScaleMultiplier : ComputeAutoSurfaceLevelScale();
 	const FVector Scale3D(EffectiveScale);
@@ -623,17 +619,9 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSurface()
 	// --- 1. Capture full world-space view orientation before any state changes ---
 	LastTransitionOrientation = CaptureCurrentViewOrientation();
 
-	// --- 2. Recompute surface origin and tangent frame for the player's actual approach
-	// angle at handoff, not where they were when streaming started. Without this the
-	// player can spawn far from the level center and immediately trigger stream-out.
-	const FVector PlanetCenter = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
-	const float PlanetRadius = GetPlanetRadiusFromOwner();
-	if (PlanetRadius > 0.f)
-	{
-		const FVector ToPlayer = (PlayerPawn->GetActorLocation() - PlanetCenter).GetSafeNormal();
-		SurfaceLevelWorldOrigin = PlanetCenter + ToPlayer * PlanetRadius;
-		ComputeTangentFrame(PlanetCenter);
-	}
+	// --- 2. Surface origin and tangent frame are fixed at the geographic anchor
+	// set during BeginStreamIn. The coordinate mapping handles placing the player
+	// at the correct surface position regardless of approach angle.
 
 	// --- 3. Capture incoming velocity ---
 	const FVector IncomingVelocity = PlayerPawn->GetVelocity();

@@ -130,6 +130,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
 	FString SurfaceLevelPath;
 
+	/** Direction from the planet center to the anchor point where the surface level center is placed.
+	 *  The level is geographically fixed: approaching from any direction maps to the correct surface XY
+	 *  via angular offset from this anchor. Default (0,0,1) = "north pole." */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
+	FVector SurfaceAnchorDirection = FVector::UpVector;
+
 	/**
 	 * Scale applied to the streamed surface level.
 	 * 0 = auto-compute from planet radius and SurfaceLevelWorldExtent.
@@ -144,7 +150,7 @@ public:
 
 	/** Fraction of planet radius the surface level patch should cover. Used by auto-scale. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming", meta = (ClampMin = "0.01", ClampMax = "1.0"))
-	float DesiredPatchFraction = 0.3f;
+	float DesiredPatchFraction = 0.05f;
 
 	/** Distance from planet center at which streaming begins. Should be greater than the planet's visual radius (e.g. SmallPlanet PlanetRadius 100000 → sphere radius 100000; use StreamingRadius 200000 so load starts while approaching). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
