@@ -20,13 +20,17 @@ Usage (with names):
     --names "SupplyCrate,FuelCanister,Terminal,AmmoBox,Generator"
 
 Arguments:
-  --input    Path to FBX or GLB file
-  --output   Directory to export separated FBX files into (created if missing)
-  --decimate Target face count per object (optional, skip if omitted)
-  --names    Comma-separated names for objects, assigned by size descending
-             (optional, defaults to input filename + index)
-  --scale    Uniform scale factor (default 1.0; use 100 for meter-to-cm)
-  --no-separate  Skip separation, export as one FBX
+  --input        Path to FBX or GLB file
+  --output       Directory to export separated FBX files into (created if missing)
+  --names        Comma-separated names for objects, assigned by size descending
+  --scale        Uniform scale factor (default 100 for meter-to-cm)
+  --no-separate  Skip separation, export as one FBX (also sets character decimate target)
+  --decimate N   Override auto-decimate target per object
+  --no-decimate  Disable decimation entirely
+
+Auto-decimation defaults (applied unless --no-decimate):
+  Props:      5,000 faces per object
+  Characters: 20,000 faces (when --no-separate is used)
 """
 
 import bpy
@@ -45,12 +49,15 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Federation Blender Mesh Processor")
     parser.add_argument("--input", required=True, help="Path to FBX or GLB file")
     parser.add_argument("--output", required=True, help="Output directory for separated FBX files")
-    parser.add_argument("--decimate", type=int, default=0, help="Target face count per object (0 = skip)")
+    parser.add_argument("--decimate", type=int, default=0,
+                        help="Override auto-decimate target per object (0 = use auto defaults)")
+    parser.add_argument("--no-decimate", action="store_true", dest="no_decimate",
+                        help="Disable auto-decimation entirely")
     parser.add_argument("--names", default="", help="Comma-separated names for objects (by size descending)")
     parser.add_argument("--no-separate", action="store_true", dest="no_separate",
                         help="Skip separation, export the whole mesh as one FBX")
-    parser.add_argument("--scale", type=float, default=1.0,
-                        help="Uniform scale factor applied after import (use 100 for m->cm conversion)")
+    parser.add_argument("--scale", type=float, default=100.0,
+                        help="Uniform scale factor (default 100 for m->cm)")
     return parser.parse_args(argv)
 
 
@@ -185,10 +192,22 @@ def separate_by_loose_parts():
     return get_mesh_objects()
 
 
+AUTO_DECIMATE_PROP = 5000
+AUTO_DECIMATE_CHARACTER = 20000
+
+def get_auto_decimate_target(obj, is_character):
+    """Determine decimate target based on face count and asset type."""
+    face_count = len(obj.data.polygons)
+    target = AUTO_DECIMATE_CHARACTER if is_character else AUTO_DECIMATE_PROP
+    if face_count <= target:
+        return 0
+    return target
+
+
 def decimate_object(obj, target_faces):
     face_count = len(obj.data.polygons)
-    if face_count <= target_faces:
-        print(f"[FED]   {obj.name}: {face_count} faces (already below target {target_faces})")
+    if target_faces <= 0 or face_count <= target_faces:
+        print(f"[FED]   {obj.name}: {face_count} faces (no decimation needed)")
         return
 
     ratio = target_faces / face_count
@@ -243,7 +262,14 @@ def main():
     print(f"[FED] === Federation Mesh Processor ===")
     print(f"[FED] Input:    {input_path}")
     print(f"[FED] Output:   {output_dir}")
-    print(f"[FED] Decimate: {args.decimate if args.decimate > 0 else 'skip'}")
+    is_character = args.no_separate
+    if args.no_decimate:
+        decimate_mode = "disabled"
+    elif args.decimate > 0:
+        decimate_mode = f"override: {args.decimate}"
+    else:
+        decimate_mode = f"auto (character={AUTO_DECIMATE_CHARACTER}, prop={AUTO_DECIMATE_PROP})"
+    print(f"[FED] Decimate: {decimate_mode}")
     print(f"[FED] Scale:    {args.scale}x")
 
     clear_scene()
@@ -272,8 +298,13 @@ def main():
 
         set_origin_to_geometry(obj)
 
-        if args.decimate > 0:
-            decimate_object(obj, args.decimate)
+        if not args.no_decimate:
+            if args.decimate > 0:
+                target = args.decimate
+            else:
+                target = get_auto_decimate_target(obj, is_character)
+            if target > 0:
+                decimate_object(obj, target)
 
         export_object_as_fbx(obj, output_dir, name)
 
