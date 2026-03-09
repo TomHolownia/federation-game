@@ -564,8 +564,12 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 	const FVector PlanetCenter = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
 	const float PlanetRadius = GetPlanetRadiusFromOwner();
 
-	// Determine anchor direction: explicit override or player approach direction.
-	FVector AnchorDir = SurfaceAnchorDirection.GetSafeNormal();
+	// Determine anchor direction: fixed geographic anchor or player approach.
+	FVector AnchorDir = FVector::ZeroVector;
+	if (bUseFixedSurfaceAnchor)
+	{
+		AnchorDir = SurfaceAnchorDirection.GetSafeNormal();
+	}
 	if (AnchorDir.IsNearlyZero() && PlayerPawn)
 	{
 		AnchorDir = (PlayerPawn->GetActorLocation() - PlanetCenter).GetSafeNormal();

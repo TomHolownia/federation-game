@@ -2305,6 +2305,7 @@ bool FPlanetStreamerAnchorDirection::RunTest(const FString& Parameters)
 	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
 	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
 
+	Comp->bUseFixedSurfaceAnchor = true;
 	Comp->SurfaceAnchorDirection = FVector(0.f, 0.f, 1.f);
 	Comp->SurfaceLevelWorldOrigin = PlanetCenter + FVector(0.f, 0.f, 1.f) * R;
 	Comp->ComputeTangentFrame(PlanetCenter);
@@ -2341,6 +2342,7 @@ bool FPlanetStreamerOppositeHemisphereMapping::RunTest(const FString& Parameters
 	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
 	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
 
+	Comp->bUseFixedSurfaceAnchor = true;
 	Comp->SurfaceAnchorDirection = FVector(0.f, 0.f, 1.f);
 	Comp->SurfaceLevelWorldOrigin = PlanetCenter + FVector(0.f, 0.f, 1.f) * R;
 	Comp->ComputeTangentFrame(PlanetCenter);
@@ -2382,6 +2384,7 @@ bool FPlanetStreamerFixedAnchorRoundTrip::RunTest(const FString& Parameters)
 	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
 
 	const FVector AnchorDir = FVector(0.f, 1.f, 0.f);
+	Comp->bUseFixedSurfaceAnchor = true;
 	Comp->SurfaceAnchorDirection = AnchorDir;
 	Comp->SurfaceLevelWorldOrigin = PlanetCenter + AnchorDir * R;
 	Comp->ComputeTangentFrame(PlanetCenter);
@@ -2461,6 +2464,7 @@ bool FPlanetStreamerHandoffPreservesAnchorOrigin::RunTest(const FString& Paramet
 	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
 
 	const FVector AnchorDir = FVector(0.f, 0.f, 1.f);
+	Comp->bUseFixedSurfaceAnchor = true;
 	Comp->SurfaceAnchorDirection = AnchorDir;
 	const FVector AnchorOrigin = PlanetCenter + AnchorDir * R;
 	Comp->SurfaceLevelWorldOrigin = AnchorOrigin;
@@ -2482,12 +2486,12 @@ bool FPlanetStreamerHandoffPreservesAnchorOrigin::RunTest(const FString& Paramet
 }
 
 // ---------------------------------------------------------------------------
-// 72. Default zero anchor: BeginStreamIn uses player approach direction
+// 72. bUseFixedSurfaceAnchor=false ignores serialized anchor, uses player dir
 // ---------------------------------------------------------------------------
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPlanetStreamerDefaultAnchorUsesPlayerDirection,
-	"FederationGame.Planet.PlanetSurfaceStreamer.DefaultZeroAnchorUsesPlayerDirection",
+	"FederationGame.Planet.PlanetSurfaceStreamer.DefaultBoolFalseIgnoresSerializedAnchor",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
 )
 
@@ -2502,31 +2506,38 @@ bool FPlanetStreamerDefaultAnchorUsesPlayerDirection::RunTest(const FString& Par
 	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
 	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
 
-	// Default anchor is ZeroVector → should use player approach direction.
-	TestTrue(TEXT("Default SurfaceAnchorDirection should be zero"),
-		Comp->SurfaceAnchorDirection.IsNearlyZero());
+	// Simulate serialized anchor: SurfaceAnchorDirection = (0,0,1) but bool is false.
+	TestFalse(TEXT("bUseFixedSurfaceAnchor should default to false"),
+		Comp->bUseFixedSurfaceAnchor);
+	Comp->SurfaceAnchorDirection = FVector(0.f, 0.f, 1.f);
 
-	// Simulate what BeginStreamIn does: player approaches from origin along -X.
+	// Replicate BeginStreamIn anchor resolution logic.
 	const FVector PlayerPos = FVector::ZeroVector;
-	const FVector ApproachDir = (PlayerPos - PlanetCenter).GetSafeNormal();
-	const FVector ExpectedOrigin = PlanetCenter + ApproachDir * R;
-
-	// Manually run the anchor resolution logic.
-	FVector AnchorDir = Comp->SurfaceAnchorDirection.GetSafeNormal();
+	FVector AnchorDir = FVector::ZeroVector;
+	if (Comp->bUseFixedSurfaceAnchor)
+	{
+		AnchorDir = Comp->SurfaceAnchorDirection.GetSafeNormal();
+	}
 	if (AnchorDir.IsNearlyZero())
 	{
 		AnchorDir = (PlayerPos - PlanetCenter).GetSafeNormal();
 	}
 
-	const FVector ComputedOrigin = PlanetCenter + AnchorDir * R;
-	TestTrue(TEXT("Computed origin should face the player, not north pole"),
-		ComputedOrigin.Equals(ExpectedOrigin, 10.f));
-
-	// The anchor should point toward the player (along -X), not up (+Z).
-	TestTrue(TEXT("Anchor dir should align with player approach"),
+	// Should use player direction (-X), ignoring serialized (0,0,1).
+	TestTrue(TEXT("Anchor dir should align with player approach (-X)"),
 		FVector::DotProduct(AnchorDir, FVector(-1.f, 0.f, 0.f)) > 0.99f);
-	TestTrue(TEXT("Anchor dir should NOT point up (north pole)"),
+	TestTrue(TEXT("Anchor dir should NOT point up (serialized north pole)"),
 		FMath::Abs(AnchorDir.Z) < 0.01f);
+
+	// When bool IS true, should use the serialized anchor.
+	Comp->bUseFixedSurfaceAnchor = true;
+	FVector AnchorDirFixed = FVector::ZeroVector;
+	if (Comp->bUseFixedSurfaceAnchor)
+	{
+		AnchorDirFixed = Comp->SurfaceAnchorDirection.GetSafeNormal();
+	}
+	TestTrue(TEXT("With bool true, should use serialized anchor direction (+Z)"),
+		FVector::DotProduct(AnchorDirFixed, FVector(0.f, 0.f, 1.f)) > 0.99f);
 
 	Actor->Destroy();
 	return true;
