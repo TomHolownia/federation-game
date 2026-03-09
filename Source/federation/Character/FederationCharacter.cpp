@@ -4,6 +4,11 @@
 #include "Core/FederationGameState.h"
 #include "Movement/JetpackMovementComponent.h"
 #include "Planet/PlanetGravityComponent.h"
+#include "Inventory/InventoryComponent.h"
+#include "Inventory/ItemBase.h"
+#include "Inventory/WeaponItem.h"
+#include "Inventory/EquipmentItem.h"
+#include "Inventory/ConsumableItem.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -19,6 +24,8 @@
 #include "InputModifiers.h"
 #include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
+#include "Core/FederationHUD.h"
+#include "GameFramework/InputSettings.h"
 
 AFederationCharacter::AFederationCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -65,6 +72,8 @@ AFederationCharacter::AFederationCharacter(const FObjectInitializer& ObjectIniti
 	GravityComp = CreateDefaultSubobject<UPlanetGravityComponent>(TEXT("PlanetGravity"));
 	JetpackComponent = CreateDefaultSubobject<UJetpackMovementComponent>(TEXT("JetpackMovement"));
 
+	InventoryComp = CreateDefaultSubobject<UInventoryComponent>(TEXT("Inventory"));
+
 	// GroundFriction only applies in Walking mode; FallingLateralFriction (default 0) applies in air.
 	// Do NOT use bUseSeparateBrakingFriction — it overrides falling friction too and kills air velocity.
 	GetCharacterMovement()->GroundFriction = 20.f;
@@ -103,6 +112,8 @@ void AFederationCharacter::BeginPlay()
 	{
 		GravityComp->SetCameraReferences(FirstPersonCameraRoot, ThirdPersonSpringArm);
 	}
+
+	AddStarterItems();
 }
 
 bool AFederationCharacter::IsUsingFlatGravity() const
@@ -234,6 +245,7 @@ void AFederationCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 	// Possession (and thus SetupPlayerInputComponent) happens before BeginPlay, so ensure our
 	// runtime-created Enhanced Input actions + IMC exist before we attempt to bind them.
 	if (!DefaultMappingContext || !MoveForwardAction || !MoveRightAction || !JumpAction || !ViewToggleAction || !RollAction ||
+		!ToggleDevHUDAction || !ToggleInventoryAction ||
 		(!LookAction && (!LookYawAction || !LookPitchAction)))
 	{
 		CreateDefaultInputActionsAndContext();
@@ -269,6 +281,14 @@ void AFederationCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		if (JetpackBoostAction)
 		{
 			EIC->BindAction(JetpackBoostAction, ETriggerEvent::Started, this, &AFederationCharacter::OnJetpackBoostPressed);
+		}
+		if (ToggleDevHUDAction)
+		{
+			EIC->BindAction(ToggleDevHUDAction, ETriggerEvent::Started, this, &AFederationCharacter::OnToggleDevHUD);
+		}
+		if (ToggleInventoryAction)
+		{
+			EIC->BindAction(ToggleInventoryAction, ETriggerEvent::Started, this, &AFederationCharacter::OnToggleInventory);
 		}
 	}
 	else if (PlayerInputComponent)
@@ -473,6 +493,7 @@ void AFederationCharacter::SetupEnhancedInput()
 	if (!Subsystem) return;
 
 	if (!DefaultMappingContext || !MoveForwardAction || !MoveRightAction || !JumpAction || !RollAction ||
+		!ToggleDevHUDAction || !ToggleInventoryAction ||
 		(!LookAction && (!LookYawAction || !LookPitchAction)))
 	{
 		CreateDefaultInputActionsAndContext();
@@ -481,6 +502,12 @@ void AFederationCharacter::SetupEnhancedInput()
 	if (DefaultMappingContext)
 	{
 		Subsystem->AddMappingContext(DefaultMappingContext, 0);
+	}
+
+	// Free the tilde key from the console so it can drive the dev HUD toggle
+	if (UInputSettings* InputSettings = UInputSettings::GetInputSettings())
+	{
+		InputSettings->ConsoleKeys.Remove(EKeys::Tilde);
 	}
 }
 
@@ -527,6 +554,16 @@ void AFederationCharacter::CreateDefaultInputActionsAndContext()
 		JetpackBoostAction = NewObject<UInputAction>(this, FName(TEXT("IA_JetpackBoost_Default")));
 		JetpackBoostAction->ValueType = EInputActionValueType::Boolean;
 	}
+	if (!ToggleDevHUDAction)
+	{
+		ToggleDevHUDAction = NewObject<UInputAction>(this, FName(TEXT("IA_ToggleDevHUD_Default")));
+		ToggleDevHUDAction->ValueType = EInputActionValueType::Boolean;
+	}
+	if (!ToggleInventoryAction)
+	{
+		ToggleInventoryAction = NewObject<UInputAction>(this, FName(TEXT("IA_ToggleInventory_Default")));
+		ToggleInventoryAction->ValueType = EInputActionValueType::Boolean;
+	}
 
 	if (DefaultMappingContext) return;
 
@@ -546,6 +583,8 @@ void AFederationCharacter::CreateDefaultInputActionsAndContext()
 	FEnhancedActionKeyMapping& E = IMC->MapKey(RollAction, EKeys::E);
 	E.Modifiers.Add(NewObject<UInputModifierNegate>(this));
 	IMC->MapKey(JetpackBoostAction, EKeys::C);
+	IMC->MapKey(ToggleDevHUDAction, EKeys::Tilde);
+	IMC->MapKey(ToggleInventoryAction, EKeys::Tab);
 
 	DefaultMappingContext = IMC;
 }
@@ -652,6 +691,88 @@ void AFederationCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 	DeactivateJetpack();
+}
+
+void AFederationCharacter::OnToggleDevHUD()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+	AFederationHUD* HUD = Cast<AFederationHUD>(PC->GetHUD());
+	if (HUD) HUD->ToggleDevDiagnostics();
+}
+
+void AFederationCharacter::OnToggleInventory()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+	AFederationHUD* HUD = Cast<AFederationHUD>(PC->GetHUD());
+	if (HUD) HUD->ToggleInventory();
+}
+
+void AFederationCharacter::AddStarterItems()
+{
+	if (!InventoryComp || InventoryComp->GetItems().Num() > 0) return;
+
+	auto MakeEquipment = [](FName ID, const FString& Name, EEquipmentSlot InSlot, float Weight)
+	{
+		UEquipmentItem* E = NewObject<UEquipmentItem>();
+		E->ItemID = ID;
+		E->DisplayName = FText::FromString(Name);
+		E->Slot = InSlot;
+		E->Weight = Weight;
+		return E;
+	};
+
+	auto MakeWeapon = [](FName ID, const FString& Name, EWeaponType Type, EWeaponClass Class, float Weight)
+	{
+		UWeaponItem* W = NewObject<UWeaponItem>();
+		W->ItemID = ID;
+		W->DisplayName = FText::FromString(Name);
+		W->WeaponType = Type;
+		W->WeaponClass = Class;
+		W->Weight = Weight;
+		return W;
+	};
+
+	InventoryComp->AddItem(MakeEquipment(FName("BasicHelmet"), TEXT("Basic Helmet"), EEquipmentSlot::Head, 2.0f));
+	InventoryComp->AddItem(MakeEquipment(FName("BasicVest"), TEXT("Basic Vest"), EEquipmentSlot::Body, 1.5f));
+	InventoryComp->AddItem(MakeEquipment(FName("BasicBoots"), TEXT("Basic Boots"), EEquipmentSlot::Shoes, 1.0f));
+	InventoryComp->AddItem(MakeEquipment(FName("BasicShield"), TEXT("Basic Shield"), EEquipmentSlot::Shield, 3.0f));
+
+	UEquipmentItem* Adrenaline = MakeEquipment(FName("AdrenalineSurge"), TEXT("Adrenaline Surge"), EEquipmentSlot::Ability1, 0.5f);
+	Adrenaline->Category = EItemCategory::Ability;
+	InventoryComp->AddItem(Adrenaline);
+
+	UEquipmentItem* Plating = MakeEquipment(FName("DermalPlating"), TEXT("Dermal Plating"), EEquipmentSlot::Biomorph1, 1.5f);
+	Plating->Category = EItemCategory::Biomorph;
+	InventoryComp->AddItem(Plating);
+
+	InventoryComp->AddItem(MakeWeapon(FName("EnergyPistol"), TEXT("Energy Pistol"), EWeaponType::Energy, EWeaponClass::Pistol, 2.5f));
+	InventoryComp->AddItem(MakeWeapon(FName("CombatKnife"), TEXT("Combat Knife"), EWeaponType::Kinetic, EWeaponClass::MeleeBladed, 1.0f));
+
+	UConsumableItem* MedPack = NewObject<UConsumableItem>();
+	MedPack->ItemID = FName("MedPack");
+	MedPack->DisplayName = FText::FromString(TEXT("Med Pack"));
+	MedPack->ConsumableType = EConsumableType::Medical;
+	MedPack->Weight = 0.5f;
+	MedPack->MaxStackSize = 5;
+	InventoryComp->AddItem(MedPack, 3);
+
+	UItemBase* AmmoCell = NewObject<UItemBase>();
+	AmmoCell->ItemID = FName("AmmoCell");
+	AmmoCell->DisplayName = FText::FromString(TEXT("Ammo Cell"));
+	AmmoCell->Category = EItemCategory::Ammunition;
+	AmmoCell->Weight = 0.2f;
+	AmmoCell->MaxStackSize = 20;
+	InventoryComp->AddItem(AmmoCell, 10);
+
+	UConsumableItem* Rations = NewObject<UConsumableItem>();
+	Rations->ItemID = FName("RationPack");
+	Rations->DisplayName = FText::FromString(TEXT("Ration Pack"));
+	Rations->ConsumableType = EConsumableType::Food;
+	Rations->Weight = 0.3f;
+	Rations->MaxStackSize = 10;
+	InventoryComp->AddItem(Rations, 5);
 }
 
 void AFederationCharacter::TryLoadDefaultMesh()

@@ -13,6 +13,7 @@ class USceneComponent;
 class UInputMappingContext;
 class UInputAction;
 class UPlanetGravityComponent;
+class UInventoryComponent;
 class UJetpackMovementComponent;
 
 /**
@@ -91,6 +92,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> JetpackBoostAction;
 
+	/** Toggle dev diagnostics overlay (` / tilde). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> ToggleDevHUDAction;
+
+	/** Toggle inventory panel (Tab). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> ToggleInventoryAction;
+
 	/** Toggle between first-person and third-person view. */
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	void ToggleViewMode();
@@ -102,6 +111,10 @@ public:
 	/** Planet gravity component -- owns all radial-gravity, alignment, camera, and ground-recovery logic. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gravity")
 	TObjectPtr<UPlanetGravityComponent> GravityComp;
+
+	/** Inventory component -- manages carried items, equipment, and weight. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
+	TObjectPtr<UInventoryComponent> InventoryComp;
 
 	/** True when using flat gravity (e.g. on streamed surface level). When true, movement/look use control rotation and camera is driven from controller. */
 	UFUNCTION(BlueprintCallable, Category = "Gravity")
@@ -140,6 +153,8 @@ public:
 	void OnJumpPressed();
 	void OnJumpReleased();
 	void OnJetpackBoostPressed();
+	void OnToggleDevHUD();
+	void OnToggleInventory();
 
 protected:
 
@@ -164,6 +179,7 @@ protected:
 	void UpdateActiveCamera();
 
 	void TryLoadDefaultMesh();
+	void AddStarterItems();
 
 	FQuat SpaceViewQuat = FQuat::Identity;
 	bool bSpaceViewInitialized = false;
