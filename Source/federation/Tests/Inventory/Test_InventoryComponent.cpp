@@ -549,6 +549,8 @@ bool FCharacterStarterItemsPresent::RunTest(const FString& Parameters)
 		return false;
 	}
 
+	Character->DispatchBeginPlay();
+
 	TestTrue(TEXT("Inventory should have starter items"), Character->InventoryComp->GetItems().Num() > 0);
 	TestTrue(TEXT("Total weight should be positive"), Character->InventoryComp->GetCurrentWeight() > 0.f);
 
