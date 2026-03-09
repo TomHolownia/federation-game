@@ -15,14 +15,23 @@ The inventory screen is divided into three main sections:
 - **Quest Items**: Separate section with expandable/scrollable list (infinite capacity)
 
 ### Center Panel - Currently Equipped
-Equipment slots arranged around a body representation:
+Equipment slots arranged around a body silhouette:
+
+```
+              [Head]
+[Secondary]   [Body]    [Primary]
+              [Shoes]
+[Shield]    [Ability 1] [Ability 2]
+[Bio 1]     [Bio 2]     [Bio 3]
+```
+
 - **Head** (top center)
-- **Primary Weapon** (left)
-- **Body** (center)
-- **Secondary Weapon** (right)
-- **Shield** (bottom left)
-- **Ability 1** (bottom center-left)
-- **Ability 2** (bottom center-right)
+- **Body** (center), flanked by **Secondary Weapon** (left) and **Primary Weapon** (right)
+- **Shoes** (below body)
+- **Shield** (bottom-left), **Ability 1** (bottom-center), **Ability 2** (bottom-right)
+- **Biomorph 1–3** (lowest row)
+
+Items are dragged from the Items grid to these slots to equip. Equipped items can be dragged back to Items or to another compatible slot. Weapons fit any weapon slot; abilities fit any ability slot; biomorphs fit any biomorph slot.
 
 ### Right Panel - Shop
 - Grid of purchasable items (12 slots shown)

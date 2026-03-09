@@ -11,7 +11,7 @@ public class federation : ModuleRules
 		// Add module source directory to include paths so "Galaxy/GalaxyStarField.h" resolves
 		PublicIncludePaths.AddRange(new string[] { ModuleDirectory });
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "Slate", "SlateCore" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 		
