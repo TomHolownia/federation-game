@@ -376,6 +376,100 @@ bool FInventoryEquipNonEquippableFails::RunTest(const FString& Parameters)
 }
 
 // ---------------------------------------------------------------------------
+// EquipItemToSlot
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInventoryEquipToSlotDirect,
+	"FederationGame.Inventory.Component.EquipItemToSlotDirect",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FInventoryEquipToSlotDirect::RunTest(const FString& Parameters)
+{
+	UInventoryComponent* Inv = MakeInventory();
+	UWeaponItem* Knife = NewObject<UWeaponItem>();
+	Knife->Weight = 1.f;
+	Inv->AddItem(Knife);
+	TestTrue(TEXT("EquipItemToSlot should succeed"), Inv->EquipItemToSlot(Knife, EEquipmentSlot::SecondaryWeapon));
+	TestEqual(TEXT("Secondary should hold knife"),
+		Inv->GetEquippedItem(EEquipmentSlot::SecondaryWeapon), static_cast<UItemBase*>(Knife));
+	TestNull(TEXT("Primary should be empty"), Inv->GetEquippedItem(EEquipmentSlot::PrimaryWeapon));
+	TestFalse(TEXT("Item removed from items"), Inv->HasItem(Knife));
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Slot family compatibility
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSlotFamilyWeapons,
+	"FederationGame.Inventory.Component.SlotFamilyWeaponsCompatible",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FSlotFamilyWeapons::RunTest(const FString& Parameters)
+{
+	TestTrue(TEXT("Primary-Secondary compatible"),
+		UInventoryComponent::AreSlotsFamilyCompatible(EEquipmentSlot::PrimaryWeapon, EEquipmentSlot::SecondaryWeapon));
+	TestTrue(TEXT("Secondary-Primary compatible"),
+		UInventoryComponent::AreSlotsFamilyCompatible(EEquipmentSlot::SecondaryWeapon, EEquipmentSlot::PrimaryWeapon));
+	TestFalse(TEXT("Primary-Head incompatible"),
+		UInventoryComponent::AreSlotsFamilyCompatible(EEquipmentSlot::PrimaryWeapon, EEquipmentSlot::Head));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSlotFamilyAbilities,
+	"FederationGame.Inventory.Component.SlotFamilyAbilitiesCompatible",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FSlotFamilyAbilities::RunTest(const FString& Parameters)
+{
+	TestTrue(TEXT("Ability1-Ability2 compatible"),
+		UInventoryComponent::AreSlotsFamilyCompatible(EEquipmentSlot::Ability1, EEquipmentSlot::Ability2));
+	TestFalse(TEXT("Ability1-Biomorph1 incompatible"),
+		UInventoryComponent::AreSlotsFamilyCompatible(EEquipmentSlot::Ability1, EEquipmentSlot::Biomorph1));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSlotFamilyBiomorphs,
+	"FederationGame.Inventory.Component.SlotFamilyBiomorphsCompatible",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FSlotFamilyBiomorphs::RunTest(const FString& Parameters)
+{
+	TestTrue(TEXT("Bio1-Bio2 compatible"),
+		UInventoryComponent::AreSlotsFamilyCompatible(EEquipmentSlot::Biomorph1, EEquipmentSlot::Biomorph2));
+	TestTrue(TEXT("Bio2-Bio3 compatible"),
+		UInventoryComponent::AreSlotsFamilyCompatible(EEquipmentSlot::Biomorph2, EEquipmentSlot::Biomorph3));
+	TestTrue(TEXT("Bio1-Bio3 compatible"),
+		UInventoryComponent::AreSlotsFamilyCompatible(EEquipmentSlot::Biomorph1, EEquipmentSlot::Biomorph3));
+	TestFalse(TEXT("Bio1-Shield incompatible"),
+		UInventoryComponent::AreSlotsFamilyCompatible(EEquipmentSlot::Biomorph1, EEquipmentSlot::Shield));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSlotFamilySameSlot,
+	"FederationGame.Inventory.Component.SlotFamilySameSlotCompatible",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FSlotFamilySameSlot::RunTest(const FString& Parameters)
+{
+	TestTrue(TEXT("Head-Head compatible"),
+		UInventoryComponent::AreSlotsFamilyCompatible(EEquipmentSlot::Head, EEquipmentSlot::Head));
+	TestTrue(TEXT("Shoes-Shoes compatible"),
+		UInventoryComponent::AreSlotsFamilyCompatible(EEquipmentSlot::Shoes, EEquipmentSlot::Shoes));
+	return true;
+}
+
+// ---------------------------------------------------------------------------
 // Delegate
 // ---------------------------------------------------------------------------
 

@@ -73,9 +73,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool EquipItem(UItemBase* Item);
 
+	/**
+	 * Equip an item directly to a specific slot, bypassing auto-resolution.
+	 * The caller is responsible for ensuring slot compatibility.
+	 * Removes the item from the Items array. Returns true on success.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool EquipItemToSlot(UItemBase* Item, EEquipmentSlot Slot);
+
 	/** Unequip whatever is in the given slot. Returns the item, or nullptr if the slot was empty. */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	UItemBase* UnequipSlot(EEquipmentSlot Slot);
+
+	/** Returns true if the two slots are in the same family (weapons, abilities, biomorphs). */
+	static bool AreSlotsFamilyCompatible(EEquipmentSlot SlotA, EEquipmentSlot SlotB);
 
 	/** Get the item currently in a slot, or nullptr. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")

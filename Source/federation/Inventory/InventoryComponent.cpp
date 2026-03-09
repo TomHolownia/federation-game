@@ -120,6 +120,44 @@ bool UInventoryComponent::EquipItem(UItemBase* Item)
 	return true;
 }
 
+bool UInventoryComponent::EquipItemToSlot(UItemBase* Item, EEquipmentSlot Slot)
+{
+	if (!Item || !HasItem(Item))
+	{
+		return false;
+	}
+
+	RemoveItem(Item, 1);
+	EquippedItems.Add(Slot, Item);
+	OnInventoryChanged.Broadcast();
+	OnNativeInventoryChanged.Broadcast();
+	return true;
+}
+
+bool UInventoryComponent::AreSlotsFamilyCompatible(EEquipmentSlot SlotA, EEquipmentSlot SlotB)
+{
+	if (SlotA == SlotB) return true;
+
+	auto IsWeaponSlot = [](EEquipmentSlot S)
+	{
+		return S == EEquipmentSlot::PrimaryWeapon || S == EEquipmentSlot::SecondaryWeapon;
+	};
+	auto IsAbilitySlot = [](EEquipmentSlot S)
+	{
+		return S == EEquipmentSlot::Ability1 || S == EEquipmentSlot::Ability2;
+	};
+	auto IsBiomorphSlot = [](EEquipmentSlot S)
+	{
+		return S == EEquipmentSlot::Biomorph1 || S == EEquipmentSlot::Biomorph2 || S == EEquipmentSlot::Biomorph3;
+	};
+
+	if (IsWeaponSlot(SlotA) && IsWeaponSlot(SlotB)) return true;
+	if (IsAbilitySlot(SlotA) && IsAbilitySlot(SlotB)) return true;
+	if (IsBiomorphSlot(SlotA) && IsBiomorphSlot(SlotB)) return true;
+
+	return false;
+}
+
 UItemBase* UInventoryComponent::UnequipSlot(EEquipmentSlot Slot)
 {
 	TObjectPtr<UItemBase>* Found = EquippedItems.Find(Slot);

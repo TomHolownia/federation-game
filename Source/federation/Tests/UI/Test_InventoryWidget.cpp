@@ -100,6 +100,24 @@ bool FDragDropOpHoldsItem::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDragDropOpTracksSource,
+	"FederationGame.UI.ItemDragDropOperation.TracksEquipmentSource",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FDragDropOpTracksSource::RunTest(const FString& Parameters)
+{
+	UItemDragDropOperation* Op = NewObject<UItemDragDropOperation>();
+	TestFalse("bFromEquipment is false by default", Op->bFromEquipment);
+
+	Op->bFromEquipment = true;
+	Op->SourceSlot = EEquipmentSlot::PrimaryWeapon;
+	TestTrue("bFromEquipment is set", Op->bFromEquipment);
+	TestEqual("SourceSlot is set", Op->SourceSlot, EEquipmentSlot::PrimaryWeapon);
+	return true;
+}
+
 // ---------------------------------------------------------------------------
 // Slot display names
 // ---------------------------------------------------------------------------
@@ -114,6 +132,7 @@ bool FSlotNames::RunTest(const FString& Parameters)
 {
 	TestEqual("Head", UInventoryWidget::GetSlotDisplayName(EEquipmentSlot::Head).ToString(), FString("Head"));
 	TestEqual("Body", UInventoryWidget::GetSlotDisplayName(EEquipmentSlot::Body).ToString(), FString("Body"));
+	TestEqual("Shoes", UInventoryWidget::GetSlotDisplayName(EEquipmentSlot::Shoes).ToString(), FString("Shoes"));
 	TestEqual("Primary", UInventoryWidget::GetSlotDisplayName(EEquipmentSlot::PrimaryWeapon).ToString(), FString("Primary"));
 	TestEqual("Secondary", UInventoryWidget::GetSlotDisplayName(EEquipmentSlot::SecondaryWeapon).ToString(), FString("Secondary"));
 	TestEqual("Shield", UInventoryWidget::GetSlotDisplayName(EEquipmentSlot::Shield).ToString(), FString("Shield"));

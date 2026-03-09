@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/DragDropOperation.h"
+#include "Inventory/ItemTypes.h"
 #include "ItemDragDropOperation.generated.h"
 
 class UItemBase;
@@ -20,4 +21,10 @@ class FEDERATION_API UItemDragDropOperation : public UDragDropOperation
 public:
 	UPROPERTY()
 	TObjectPtr<UItemBase> DraggedItem;
+
+	UPROPERTY()
+	EEquipmentSlot SourceSlot = EEquipmentSlot::Head;
+
+	UPROPERTY()
+	bool bFromEquipment = false;
 };

@@ -736,7 +736,16 @@ void AFederationCharacter::AddStarterItems()
 
 	InventoryComp->AddItem(MakeEquipment(FName("BasicHelmet"), TEXT("Basic Helmet"), EEquipmentSlot::Head, 2.0f));
 	InventoryComp->AddItem(MakeEquipment(FName("BasicVest"), TEXT("Basic Vest"), EEquipmentSlot::Body, 1.5f));
+	InventoryComp->AddItem(MakeEquipment(FName("BasicBoots"), TEXT("Basic Boots"), EEquipmentSlot::Shoes, 1.0f));
 	InventoryComp->AddItem(MakeEquipment(FName("BasicShield"), TEXT("Basic Shield"), EEquipmentSlot::Shield, 3.0f));
+
+	UEquipmentItem* Adrenaline = MakeEquipment(FName("AdrenalineSurge"), TEXT("Adrenaline Surge"), EEquipmentSlot::Ability1, 0.5f);
+	Adrenaline->Category = EItemCategory::Ability;
+	InventoryComp->AddItem(Adrenaline);
+
+	UEquipmentItem* Plating = MakeEquipment(FName("DermalPlating"), TEXT("Dermal Plating"), EEquipmentSlot::Biomorph1, 1.5f);
+	Plating->Category = EItemCategory::Biomorph;
+	InventoryComp->AddItem(Plating);
 
 	InventoryComp->AddItem(MakeWeapon(FName("EnergyPistol"), TEXT("Energy Pistol"), EWeaponType::Energy, EWeaponClass::Pistol, 2.5f));
 	InventoryComp->AddItem(MakeWeapon(FName("CombatKnife"), TEXT("Combat Knife"), EWeaponType::Kinetic, EWeaponClass::MeleeBladed, 1.0f));

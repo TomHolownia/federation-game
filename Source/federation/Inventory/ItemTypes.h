@@ -26,6 +26,7 @@ enum class EEquipmentSlot : uint8
 {
 	Head,
 	Body,
+	Shoes,
 	PrimaryWeapon,
 	SecondaryWeapon,
 	Shield,

@@ -2,6 +2,7 @@
 
 #include "UI/EquipmentSlotWidget.h"
 #include "UI/ItemDragDropOperation.h"
+#include "UI/ItemTileWidget.h"
 #include "UI/InventoryWidget.h"
 #include "Inventory/InventoryComponent.h"
 #include "Inventory/ItemBase.h"
@@ -101,30 +102,39 @@ void UEquipmentSlotWidget::Refresh()
 	}
 }
 
+bool UEquipmentSlotWidget::IsItemCompatible(const UItemBase* Item) const
+{
+	if (const UWeaponItem* Weapon = Cast<UWeaponItem>(Item))
+	{
+		return EquipSlot == EEquipmentSlot::PrimaryWeapon || EquipSlot == EEquipmentSlot::SecondaryWeapon;
+	}
+	if (const UEquipmentItem* Equipment = Cast<UEquipmentItem>(Item))
+	{
+		return UInventoryComponent::AreSlotsFamilyCompatible(Equipment->Slot, EquipSlot);
+	}
+	return false;
+}
+
 bool UEquipmentSlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
 {
 	UItemDragDropOperation* ItemDrag = Cast<UItemDragDropOperation>(InOperation);
 	if (!ItemDrag || !ItemDrag->DraggedItem || !InventoryComp) return false;
 
 	UItemBase* DraggedItem = ItemDrag->DraggedItem;
+	if (!IsItemCompatible(DraggedItem)) return false;
 
-	// Check slot compatibility: weapons go to weapon slots, equipment uses its Slot property
-	bool bCompatible = false;
-	if (UWeaponItem* Weapon = Cast<UWeaponItem>(DraggedItem))
+	if (ItemDrag->bFromEquipment)
 	{
-		bCompatible = (EquipSlot == EEquipmentSlot::PrimaryWeapon || EquipSlot == EEquipmentSlot::SecondaryWeapon);
-	}
-	else if (UEquipmentItem* Equipment = Cast<UEquipmentItem>(DraggedItem))
-	{
-		bCompatible = (Equipment->Slot == EquipSlot);
+		// Dragging from another equipment slot to this one.
+		// Unequip source slot (returns item to Items array).
+		InventoryComp->UnequipSlot(ItemDrag->SourceSlot);
 	}
 
-	if (!bCompatible) return false;
-
-	// Unequip current item in this slot first
+	// Unequip current occupant of this slot (returns to Items if occupied).
 	InventoryComp->UnequipSlot(EquipSlot);
 
-	InventoryComp->EquipItem(DraggedItem);
+	// Equip the dragged item directly to this slot.
+	InventoryComp->EquipItemToSlot(DraggedItem, EquipSlot);
 	OnSlotChanged.ExecuteIfBound();
 	return true;
 }
@@ -136,10 +146,28 @@ FReply UEquipmentSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry
 		UItemBase* Equipped = InventoryComp->GetEquippedItem(EquipSlot);
 		if (Equipped)
 		{
-			InventoryComp->UnequipSlot(EquipSlot);
-			OnSlotChanged.ExecuteIfBound();
-			return FReply::Handled();
+			return FReply::Handled().DetectDrag(TakeWidget(), EKeys::LeftMouseButton);
 		}
 	}
 	return FReply::Unhandled();
+}
+
+void UEquipmentSlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation)
+{
+	UItemBase* Equipped = InventoryComp ? InventoryComp->GetEquippedItem(EquipSlot) : nullptr;
+	if (!Equipped) return;
+
+	UItemDragDropOperation* DragOp = NewObject<UItemDragDropOperation>();
+	DragOp->DraggedItem = Equipped;
+	DragOp->SourceSlot = EquipSlot;
+	DragOp->bFromEquipment = true;
+	DragOp->Pivot = EDragPivot::CenterCenter;
+
+	UItemTileWidget* DragVisual = CreateWidget<UItemTileWidget>(GetOwningPlayer());
+	if (DragVisual)
+	{
+		DragVisual->SetItem(Equipped, 1);
+	}
+	DragOp->DefaultDragVisual = DragVisual;
+	OutOperation = DragOp;
 }

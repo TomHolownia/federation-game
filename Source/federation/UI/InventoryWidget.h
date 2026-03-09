@@ -36,6 +36,9 @@ public:
 
 	static FText GetSlotDisplayName(EEquipmentSlot Slot);
 
+protected:
+	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+
 private:
 	void BuildWidgetTree();
 	void PopulateItemTiles();

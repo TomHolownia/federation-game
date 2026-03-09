@@ -15,7 +15,7 @@ class UBorder;
 /**
  * A single equipment slot in the spatial equipment layout.
  * Accepts item drops and displays the currently equipped item.
- * Click an occupied slot to unequip.
+ * Equipped items can be dragged to other slots or back to inventory.
  */
 UCLASS()
 class FEDERATION_API UEquipmentSlotWidget : public UUserWidget
@@ -35,9 +35,11 @@ protected:
 	virtual void NativeOnInitialized() override;
 	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
 
 private:
 	void BuildWidgetTree();
+	bool IsItemCompatible(const UItemBase* Item) const;
 
 	UPROPERTY()
 	EEquipmentSlot EquipSlot = EEquipmentSlot::Body;

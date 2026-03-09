@@ -3,6 +3,7 @@
 #include "UI/InventoryWidget.h"
 #include "UI/ItemTileWidget.h"
 #include "UI/EquipmentSlotWidget.h"
+#include "UI/ItemDragDropOperation.h"
 #include "Inventory/InventoryComponent.h"
 #include "Inventory/ItemBase.h"
 #include "Components/TextBlock.h"
@@ -31,20 +32,19 @@ namespace InvUI
 	static const FSlateColor TextDim = FSlateColor(FLinearColor(0.55f, 0.6f, 0.65f));
 	static const FLinearColor WeightBarFill(0.3f, 0.8f, 1.0f, 1.0f);
 
-	// Spatial positions for equipment slots (column, row) → pixel offset.
-	// Layout mirrors a character silhouette per the design sketch.
 	struct FSlotPos { EEquipmentSlot Slot; float X; float Y; };
 	static const FSlotPos SlotPositions[] = {
 		{ EEquipmentSlot::Head,            86.f,   0.f },
 		{ EEquipmentSlot::SecondaryWeapon,  0.f,  86.f },
 		{ EEquipmentSlot::Body,            86.f,  86.f },
 		{ EEquipmentSlot::PrimaryWeapon,  172.f,  86.f },
-		{ EEquipmentSlot::Shield,           0.f, 172.f },
-		{ EEquipmentSlot::Ability1,        86.f, 172.f },
-		{ EEquipmentSlot::Ability2,       172.f, 172.f },
-		{ EEquipmentSlot::Biomorph1,        0.f, 258.f },
-		{ EEquipmentSlot::Biomorph2,       86.f, 258.f },
-		{ EEquipmentSlot::Biomorph3,      172.f, 258.f },
+		{ EEquipmentSlot::Shoes,           86.f, 172.f },
+		{ EEquipmentSlot::Shield,           0.f, 258.f },
+		{ EEquipmentSlot::Ability1,        86.f, 258.f },
+		{ EEquipmentSlot::Ability2,       172.f, 258.f },
+		{ EEquipmentSlot::Biomorph1,        0.f, 344.f },
+		{ EEquipmentSlot::Biomorph2,       86.f, 344.f },
+		{ EEquipmentSlot::Biomorph3,      172.f, 344.f },
 	};
 }
 
@@ -53,6 +53,7 @@ namespace InvUI
 void UInventoryWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+	SetVisibility(ESlateVisibility::Visible);
 	BuildWidgetTree();
 }
 
@@ -63,6 +64,25 @@ void UInventoryWidget::NativeDestruct()
 		InventoryComp->OnNativeInventoryChanged.RemoveAll(this);
 	}
 	Super::NativeDestruct();
+}
+
+// ---------------------------------------------------------------------------
+// Drop handler — unequip when equipped items are dropped on the items area
+// ---------------------------------------------------------------------------
+
+bool UInventoryWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
+{
+	UItemDragDropOperation* ItemDrag = Cast<UItemDragDropOperation>(InOperation);
+	if (!ItemDrag || !InventoryComp) return false;
+
+	if (ItemDrag->bFromEquipment && ItemDrag->DraggedItem)
+	{
+		InventoryComp->UnequipSlot(ItemDrag->SourceSlot);
+		RefreshInventory();
+		return true;
+	}
+
+	return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,21 +97,18 @@ void UInventoryWidget::BuildWidgetTree()
 	FSlateFontInfo SectionFont = FCoreStyle::GetDefaultFontStyle("Bold", 13);
 	FSlateFontInfo SmallFont = FCoreStyle::GetDefaultFontStyle("Regular", 12);
 
-	// Root canvas (full screen)
 	UCanvasPanel* Root = WidgetTree->ConstructWidget<UCanvasPanel>();
 	WidgetTree->RootWidget = Root;
 
-	// Size-constrained panel (centered)
 	USizeBox* SizeBox = WidgetTree->ConstructWidget<USizeBox>();
 	SizeBox->SetMinDesiredWidth(920.f);
-	SizeBox->SetMinDesiredHeight(620.f);
+	SizeBox->SetMinDesiredHeight(700.f);
 
 	UCanvasPanelSlot* SizeSlot = Root->AddChildToCanvas(SizeBox);
 	SizeSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
 	SizeSlot->SetAlignment(FVector2D(0.5f, 0.5f));
 	SizeSlot->SetAutoSize(true);
 
-	// Background
 	UBorder* Background = WidgetTree->ConstructWidget<UBorder>();
 	Background->SetBrushColor(InvUI::PanelBg);
 	Background->SetPadding(FMargin(24.f, 18.f));
@@ -202,18 +219,11 @@ void UInventoryWidget::BuildWidgetTree()
 		Gap->SetSize(FVector2D(0.f, 8.f));
 		EquipVBox->AddChildToVerticalBox(Gap);
 
-		// Canvas panel for spatial slot positioning
 		UCanvasPanel* SlotCanvas = WidgetTree->ConstructWidget<UCanvasPanel>();
 		UVerticalBoxSlot* CanvasSlot = EquipVBox->AddChildToVerticalBox(SlotCanvas);
 		CanvasSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-
-		// Equipment slot widgets are created dynamically (not via WidgetTree)
-		// because they are UUserWidget subclasses that need CreateWidget<>().
-		// We defer creation to SetInventoryComponent / first refresh.
-		// Store the canvas for later use.
 		SlotCanvas->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 
-		// Pre-create empty slot outlines as placeholders
 		for (const InvUI::FSlotPos& Pos : InvUI::SlotPositions)
 		{
 			UBorder* Placeholder = WidgetTree->ConstructWidget<UBorder>();
@@ -294,18 +304,11 @@ void UInventoryWidget::PopulateItemTiles()
 
 void UInventoryWidget::RefreshEquipmentSlots()
 {
-	// Create slot widgets on first call (needs CreateWidget which requires a player controller)
 	if (EquipmentSlots.Num() == 0 && GetOwningPlayer())
 	{
-		// Find the slot canvas — it's inside the equipment section
-		// We need to add the slot widgets to the same canvas that has the placeholders.
-		// The canvas is the last canvas panel we created in BuildWidgetTree.
-		// Navigate: Root → SizeBox → Background → OuterVBox → Columns → EquipSection → EquipVBox → Canvas
 		UCanvasPanel* SlotCanvas = nullptr;
-
 		if (WidgetTree && WidgetTree->RootWidget)
 		{
-			// Walk the tree to find our slot canvas
 			TArray<UWidget*> AllWidgets;
 			WidgetTree->GetAllWidgets(AllWidgets);
 			for (UWidget* W : AllWidgets)
@@ -337,7 +340,6 @@ void UInventoryWidget::RefreshEquipmentSlots()
 		}
 	}
 
-	// Refresh existing slot widgets
 	for (UEquipmentSlotWidget* SlotWidget : EquipmentSlots)
 	{
 		if (SlotWidget)
@@ -370,6 +372,7 @@ FText UInventoryWidget::GetSlotDisplayName(EEquipmentSlot InSlot)
 	{
 		case EEquipmentSlot::Head:            return FText::FromString(TEXT("Head"));
 		case EEquipmentSlot::Body:            return FText::FromString(TEXT("Body"));
+		case EEquipmentSlot::Shoes:           return FText::FromString(TEXT("Shoes"));
 		case EEquipmentSlot::PrimaryWeapon:   return FText::FromString(TEXT("Primary"));
 		case EEquipmentSlot::SecondaryWeapon: return FText::FromString(TEXT("Secondary"));
 		case EEquipmentSlot::Shield:          return FText::FromString(TEXT("Shield"));
