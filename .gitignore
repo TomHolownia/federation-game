@@ -64,6 +64,9 @@ Build/
 # Cursor MCP config - use .cursor/mcp.json.example as template
 .cursor/mcp.json
 
+# Claude Code MCP config (contains API tokens)
+.mcp.json
+
 # Local env (Confluence MCP, etc.) - use .env.example as template, never commit
 .env
 .env.local
