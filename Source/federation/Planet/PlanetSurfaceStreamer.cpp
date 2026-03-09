@@ -564,11 +564,17 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 	const FVector PlanetCenter = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
 	const float PlanetRadius = GetPlanetRadiusFromOwner();
 
-	// Place the level at a fixed geographic anchor on the planet surface.
-	// The coordinate mapping (SpaceToSurfacePosition) handles routing any
-	// approach direction to the correct XY position on this fixed level.
-	const FVector AnchorDir = SurfaceAnchorDirection.GetSafeNormal();
-	const FVector LevelLoadLocation = (PlanetRadius > 0.f && !AnchorDir.IsNearlyZero())
+	// Determine anchor direction: explicit override or player approach direction.
+	FVector AnchorDir = SurfaceAnchorDirection.GetSafeNormal();
+	if (AnchorDir.IsNearlyZero() && PlayerPawn)
+	{
+		AnchorDir = (PlayerPawn->GetActorLocation() - PlanetCenter).GetSafeNormal();
+	}
+	if (AnchorDir.IsNearlyZero())
+	{
+		AnchorDir = FVector::UpVector;
+	}
+	const FVector LevelLoadLocation = (PlanetRadius > 0.f)
 		? PlanetCenter + AnchorDir * PlanetRadius
 		: PlanetCenter;
 	SurfaceLevelWorldOrigin = LevelLoadLocation;
