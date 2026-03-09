@@ -113,22 +113,67 @@ float UPlanetSurfaceStreamer::GetPlanetRadiusFromOwner() const
 
 float UPlanetSurfaceStreamer::GetEffectiveHandoffRadius() const
 {
-	if (TransitionProfile.bUseExplicitRadiiOverrides && HandoffRadius > 0.f) return HandoffRadius;
-
-	if (TransitionProfile.bUseAdaptiveRadii)
+	float Result;
+	if (TransitionProfile.bUseExplicitRadiiOverrides && HandoffRadius > 0.f)
+	{
+		Result = HandoffRadius;
+	}
+	else if (TransitionProfile.bUseAdaptiveRadii)
 	{
 		const float PlanetRadius = GetPlanetRadiusFromOwner();
 		if (PlanetRadius > 0.f)
 		{
-			return ComputeAdaptiveHandoffRadius(PlanetRadius, GetPlayerApproachSpeedTowardPlanet());
+			Result = ComputeAdaptiveHandoffRadius(PlanetRadius, GetPlayerApproachSpeedTowardPlanet());
+		}
+		else
+		{
+			Result = 100000.f;
+		}
+	}
+	else
+	{
+		const float PlanetRadius = GetPlanetRadiusFromOwner();
+		if (PlanetRadius <= 0.f)
+		{
+			Result = 100000.f;
+		}
+		else
+		{
+			const float Margin = FMath::Max(500.f, PlanetRadius * 0.05f);
+			Result = PlanetRadius + Margin;
 		}
 	}
 
+	// Guard: ensure handoff altitude never exceeds 80% of effective exit altitude.
 	const float PlanetRadius = GetPlanetRadiusFromOwner();
-	if (PlanetRadius <= 0.f) return 100000.f;
-	// Add margin so we trigger when at the surface (player center can be slightly outside radius when standing on the sphere).
-	const float Margin = FMath::Max(500.f, PlanetRadius * 0.05f);
-	return PlanetRadius + Margin;
+	if (PlanetRadius > 0.f)
+	{
+		const float EffectiveExit = GetEffectiveExitAltitude();
+		const float MaxHandoffAlt = EffectiveExit * 0.8f;
+		const float MaxHandoffRadius = PlanetRadius + MaxHandoffAlt;
+		Result = FMath::Min(Result, MaxHandoffRadius);
+	}
+
+	return Result;
+}
+
+float UPlanetSurfaceStreamer::GetEffectiveExitAltitude() const
+{
+	const float PlanetRadius = GetPlanetRadiusFromOwner();
+	const float AdaptiveAlt = PlanetRadius * FMath::Max(0.01f, TransitionProfile.ExitAltitudeMultiplier);
+	return FMath::Max(ExitAltitude, AdaptiveAlt);
+}
+
+float UPlanetSurfaceStreamer::ComputeAutoSurfaceLevelScale() const
+{
+	constexpr float MinAutoScale = 0.005f;
+	const float PlanetRadius = GetPlanetRadiusFromOwner();
+	if (PlanetRadius <= 0.f) return 1.f;
+
+	const float SafeExtent = FMath::Max(100.f, SurfaceLevelWorldExtent);
+	const float SafePatch = FMath::Clamp(DesiredPatchFraction, 0.01f, 1.f);
+	const float DesiredPatchRadius = PlanetRadius * SafePatch;
+	return FMath::Clamp(DesiredPatchRadius / SafeExtent, MinAutoScale, 10.f);
 }
 
 bool UPlanetSurfaceStreamer::ShouldStreamIn(float DistanceSq) const
@@ -312,11 +357,9 @@ void UPlanetSurfaceStreamer::SetPlanetFadeAlpha(float Alpha)
 
 bool UPlanetSurfaceStreamer::ShouldStreamOut(const FVector& PlayerLocation, const FVector& SurfaceOrigin) const
 {
-	// Use only vertical (Z) offset so lateral movement over hills doesn't trigger stream-out.
-	// The surface level uses Z-up; distance from origin in X/Y is lateral, not altitude.
 	const FVector Offset = PlayerLocation - SurfaceOrigin;
-	const float AltitudeAboveSurface = Offset.Z;
-	return AltitudeAboveSurface > ExitAltitude;
+	const float AltitudeAboveSurface = FVector::DotProduct(Offset, TangentNormal);
+	return AltitudeAboveSurface > GetEffectiveExitAltitude();
 }
 
 void UPlanetSurfaceStreamer::SaveSpacePosition(const FVector& Location, const FRotator& Rotation)
@@ -521,22 +564,28 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 	const FVector PlanetCenter = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
 	const float PlanetRadius = GetPlanetRadiusFromOwner();
 
-	// Place the level at the planet's surface facing the player so the terrain
-	// renders IN FRONT of the planet sphere during approach.
-	FVector LevelLoadLocation = PlanetCenter;
-	if (PlayerPawn && PlanetRadius > 0.f)
+	// Determine anchor direction: fixed geographic anchor or player approach.
+	FVector AnchorDir = FVector::ZeroVector;
+	if (bUseFixedSurfaceAnchor)
 	{
-		const FVector ToPlayer = (PlayerPawn->GetActorLocation() - PlanetCenter).GetSafeNormal();
-		LevelLoadLocation = PlanetCenter + ToPlayer * PlanetRadius;
+		AnchorDir = SurfaceAnchorDirection.GetSafeNormal();
 	}
+	if (AnchorDir.IsNearlyZero() && PlayerPawn)
+	{
+		AnchorDir = (PlayerPawn->GetActorLocation() - PlanetCenter).GetSafeNormal();
+	}
+	if (AnchorDir.IsNearlyZero())
+	{
+		AnchorDir = FVector::UpVector;
+	}
+	const FVector LevelLoadLocation = (PlanetRadius > 0.f)
+		? PlanetCenter + AnchorDir * PlanetRadius
+		: PlanetCenter;
 	SurfaceLevelWorldOrigin = LevelLoadLocation;
 	ComputeTangentFrame(PlanetCenter);
-
-	// Orient the streamed level so its local Z (up) matches the planet surface normal at this
-	// approach point. This allows correct north-pole / south-pole / equator streaming: fly in
-	// at any point and the level loads with horizon aligned to that patch.
 	const FRotator LevelRotation = FRotationMatrix::MakeFromXY(TangentX, TangentY).Rotator();
-	const FVector Scale3D(SurfaceLevelScaleMultiplier);
+	const float EffectiveScale = (SurfaceLevelScaleMultiplier > 0.f) ? SurfaceLevelScaleMultiplier : ComputeAutoSurfaceLevelScale();
+	const FVector Scale3D(EffectiveScale);
 	const FTransform LevelTransform(FQuat(LevelRotation), LevelLoadLocation, Scale3D);
 
 	const FSoftObjectPath LevelPath(SurfaceLevelPath);
@@ -557,7 +606,7 @@ void UPlanetSurfaceStreamer::BeginStreamIn()
 		TimeSinceStreamOut = StreamOutReentryCooldownSeconds; // Allow immediate transition on first approach.
 		LoadingStartTime = World ? World->GetTimeSeconds() : 0.f;
 		// Game state (Loading/level name) is set in UpdateLoadingState only when close, so HUD shows "Deep Space" when far
-		UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: === STREAM START === level='%s' at surface pos (%.0f, %.0f, %.0f), planet radius=%.0f, scale=%.3f"), *SurfaceLevelPath, LevelLoadLocation.X, LevelLoadLocation.Y, LevelLoadLocation.Z, PlanetRadius, SurfaceLevelScaleMultiplier);
+		UE_LOG(LogTemp, Warning, TEXT("PlanetSurfaceStreamer: === STREAM START === level='%s' at surface pos (%.0f, %.0f, %.0f), planet radius=%.0f, scale=%.3f (auto=%s), exitAlt=%.0f"), *SurfaceLevelPath, LevelLoadLocation.X, LevelLoadLocation.Y, LevelLoadLocation.Z, PlanetRadius, EffectiveScale, SurfaceLevelScaleMultiplier <= 0.f ? TEXT("yes") : TEXT("no"), GetEffectiveExitAltitude());
 	}
 	else
 	{
@@ -580,17 +629,9 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSurface()
 	// --- 1. Capture full world-space view orientation before any state changes ---
 	LastTransitionOrientation = CaptureCurrentViewOrientation();
 
-	// --- 2. Recompute surface origin and tangent frame for the player's actual approach
-	// angle at handoff, not where they were when streaming started. Without this the
-	// player can spawn far from the level center and immediately trigger stream-out.
-	const FVector PlanetCenter = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
-	const float PlanetRadius = GetPlanetRadiusFromOwner();
-	if (PlanetRadius > 0.f)
-	{
-		const FVector ToPlayer = (PlayerPawn->GetActorLocation() - PlanetCenter).GetSafeNormal();
-		SurfaceLevelWorldOrigin = PlanetCenter + ToPlayer * PlanetRadius;
-		ComputeTangentFrame(PlanetCenter);
-	}
+	// --- 2. Surface origin and tangent frame are fixed at the geographic anchor
+	// set during BeginStreamIn. The coordinate mapping handles placing the player
+	// at the correct surface position regardless of approach angle.
 
 	// --- 3. Capture incoming velocity ---
 	const FVector IncomingVelocity = PlayerPawn->GetVelocity();
@@ -605,19 +646,22 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSurface()
 		Owner->SetActorEnableCollision(false);
 	}
 
-	// --- 6. Switch to flat gravity + preserve velocity ---
+	// --- 6. Switch to surface gravity + preserve velocity ---
+	const FVector SurfaceUp = TangentNormal;
+	const FVector SurfaceDown = -TangentNormal;
+
 	if (Char && Char->GetCharacterMovement())
 	{
-		Char->GetCharacterMovement()->SetGravityDirection(FVector::DownVector);
-		// On streamed surface levels we want standard Earth-like falling behavior.
+		Char->GetCharacterMovement()->SetGravityDirection(SurfaceDown);
 		Char->GetCharacterMovement()->GravityScale = 1.f;
-		const float DownSpeed = FMath::Max(0.f, -IncomingVelocity.Z);
-		Char->GetCharacterMovement()->Velocity = FVector(IncomingVelocity.X, IncomingVelocity.Y, -DownSpeed);
+		const float DownSpeed = FMath::Max(0.f, -FVector::DotProduct(IncomingVelocity, SurfaceUp));
+		const FVector TangentVelocity = IncomingVelocity - FVector::DotProduct(IncomingVelocity, SurfaceUp) * SurfaceUp;
+		Char->GetCharacterMovement()->Velocity = TangentVelocity + SurfaceDown * DownSpeed;
 	}
 
 	// --- 7. Preserve forward exactly, blend roll to local horizon at handoff ---
 	FQuat SurfaceViewQuat = LastTransitionOrientation.bIsValid
-		? ComputeForwardPriorityBlendedViewQuat(LastTransitionOrientation.ViewQuat, FVector::UpVector, 1.f)
+		? ComputeForwardPriorityBlendedViewQuat(LastTransitionOrientation.ViewQuat, SurfaceUp, 1.f)
 		: FQuat::Identity;
 
 	if (!LastTransitionOrientation.bIsValid && PC)
@@ -644,10 +688,10 @@ void UPlanetSurfaceStreamer::TransitionPlayerToSurface()
 		PC->SetControlRotation(SurfaceControlRotation);
 	}
 
-	// --- 8. Reset gravity component to flat-world state ---
+	// --- 8. Reset gravity component to surface-aligned state ---
 	if (GravComp)
 	{
-		GravComp->GravityDir = FVector::DownVector;
+		GravComp->GravityDir = SurfaceDown;
 		GravComp->bViewInitialized = false;
 		GravComp->SetSurfaceBlendAlpha(1.f);
 	}
@@ -766,7 +810,7 @@ FVector UPlanetSurfaceStreamer::SpaceToSurfacePosition(const FVector& SpacePos) 
 	const float LocalY = Elevation * R;
 	const float LocalZ = FMath::Max(300.f, Altitude);
 
-	return SurfaceLevelWorldOrigin + FVector(LocalX, LocalY, LocalZ);
+	return SurfaceLevelWorldOrigin + TangentX * LocalX + TangentY * LocalY + TangentNormal * LocalZ;
 }
 
 FVector UPlanetSurfaceStreamer::SurfaceToSpacePosition(const FVector& SurfacePos) const
@@ -775,10 +819,13 @@ FVector UPlanetSurfaceStreamer::SurfaceToSpacePosition(const FVector& SurfacePos
 	const FVector PlanetCenter = Owner ? Owner->GetActorLocation() : FVector::ZeroVector;
 	const float R = FMath::Max(1.f, GetPlanetRadiusFromOwner());
 	const FVector Offset = SurfacePos - SurfaceLevelWorldOrigin;
-	const float Altitude = Offset.Z;
 
-	const float AngleX = Offset.X / R;
-	const float AngleY = Offset.Y / R;
+	const float LocalX = FVector::DotProduct(Offset, TangentX);
+	const float LocalY = FVector::DotProduct(Offset, TangentY);
+	const float Altitude = FVector::DotProduct(Offset, TangentNormal);
+
+	const float AngleX = LocalX / R;
+	const float AngleY = LocalY / R;
 
 	// Rodrigues rotation: rotate TangentNormal around TangentY by AngleX,
 	// then around TangentX by -AngleY to get the sphere direction.

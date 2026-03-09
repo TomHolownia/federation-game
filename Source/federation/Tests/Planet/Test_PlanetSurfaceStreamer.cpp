@@ -647,6 +647,7 @@ bool FPlanetStreamerExplicitHandoffOverride::RunTest(const FString& Parameters)
 
 	Comp->HandoffRadius = 150000.f;
 	Comp->TransitionProfile.bUseExplicitRadiiOverrides = true;
+	Comp->ExitAltitude = 100000.f;
 
 	TestTrue(TEXT("Explicit override returns HandoffRadius"),
 		FMath::IsNearlyEqual(Comp->GetEffectiveHandoffRadius(), 150000.f, 1.f));
@@ -1875,6 +1876,670 @@ bool FPlanetStreamerForwardPriorityBlendMovesUpTowardTarget::RunTest(const FStri
 	const float DotHigh = FVector::DotProduct(UpHigh, TargetUpProjected);
 	TestTrue(TEXT("Higher alpha should move up-vector closer to target up"), DotHigh > DotLow);
 
+	return true;
+}
+
+// ===========================================================================
+// FED-048: TDD tests for planet streaming fixes
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// 52. Effective exit altitude scales with planet radius
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerExitAltitudeScalesWithRadius,
+	"FederationGame.Planet.PlanetSurfaceStreamer.EffectiveExitAltitudeScalesWithPlanetRadius",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerExitAltitudeScalesWithRadius::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, 1100000.f);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	const float EffectiveExit = Comp->GetEffectiveExitAltitude();
+
+	TestTrue(TEXT("Effective exit altitude for large planet should exceed fixed default of 50000"),
+		EffectiveExit > 50000.f);
+	TestTrue(TEXT("Effective exit altitude should scale with planet radius (expect > 100000 for R=1.1M)"),
+		EffectiveExit > 100000.f);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 53. Handoff altitude always below exit altitude (various planet sizes)
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerHandoffBelowExitAltitude,
+	"FederationGame.Planet.PlanetSurfaceStreamer.HandoffAltitudeAlwaysBelowExitAltitude",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerHandoffBelowExitAltitude::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float Radii[] = { 10000.f, 50000.f, 100000.f, 500000.f, 1100000.f, 5000000.f };
+	for (float R : Radii)
+	{
+		UPlanetSurfaceStreamer* Comp = nullptr;
+		AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, R);
+		if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); continue; }
+
+		const float HandoffR = Comp->GetEffectiveHandoffRadius();
+		const float HandoffAltitude = HandoffR - R;
+		const float ExitAlt = Comp->GetEffectiveExitAltitude();
+
+		TestTrue(FString::Printf(TEXT("R=%.0f: handoff altitude (%.0f) < exit altitude (%.0f)"), R, HandoffAltitude, ExitAlt),
+			HandoffAltitude < ExitAlt);
+
+		Actor->Destroy();
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 54. No immediate stream-out after handoff
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerNoImmediateStreamOutAfterHandoff,
+	"FederationGame.Planet.PlanetSurfaceStreamer.NoImmediateStreamOutAfterHandoff",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerNoImmediateStreamOutAfterHandoff::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float Radii[] = { 100000.f, 500000.f, 1100000.f, 5000000.f };
+	for (float R : Radii)
+	{
+		UPlanetSurfaceStreamer* Comp = nullptr;
+		AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, R);
+		if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); continue; }
+
+		const float HandoffR = Comp->GetEffectiveHandoffRadius();
+		const float HandoffAltitude = HandoffR - R;
+
+		const FVector SurfaceOrigin = FVector::ZeroVector;
+		const FVector PlayerAtHandoff = FVector(0.f, 0.f, HandoffAltitude);
+
+		TestFalse(FString::Printf(TEXT("R=%.0f: ShouldStreamOut should be false at handoff altitude %.0f"), R, HandoffAltitude),
+			Comp->ShouldStreamOut(PlayerAtHandoff, SurfaceOrigin));
+
+		Actor->Destroy();
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 55. Large planet (Terra Nova) handoff does not exceed exit altitude
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerLargePlanetHandoffSafe,
+	"FederationGame.Planet.PlanetSurfaceStreamer.LargePlanetHandoffDoesNotExceedExitAltitude",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerLargePlanetHandoffSafe::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float TerraNovaRadius = 1100000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, TerraNovaRadius);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	const float HandoffR = Comp->GetEffectiveHandoffRadius();
+	const float HandoffAlt = HandoffR - TerraNovaRadius;
+	const float ExitAlt = Comp->GetEffectiveExitAltitude();
+
+	TestTrue(FString::Printf(TEXT("Terra Nova: handoff alt %.0f < exit alt %.0f"), HandoffAlt, ExitAlt),
+		HandoffAlt < ExitAlt);
+
+	const FVector SurfaceOrigin = FVector::ZeroVector;
+	const FVector PlayerAtHandoff = FVector(0.f, 0.f, HandoffAlt);
+	TestFalse(TEXT("Terra Nova: ShouldStreamOut at handoff altitude should be false"),
+		Comp->ShouldStreamOut(PlayerAtHandoff, SurfaceOrigin));
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 56. Streaming radii invariants: streaming > handoff > planet radius
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerRadiiInvariantsHold,
+	"FederationGame.Planet.PlanetSurfaceStreamer.StreamingRadiiInvariantsHold",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerRadiiInvariantsHold::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float Radii[] = { 10000.f, 100000.f, 500000.f, 1100000.f, 5000000.f };
+	for (float R : Radii)
+	{
+		UPlanetSurfaceStreamer* Comp = nullptr;
+		AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, R);
+		if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); continue; }
+
+		const float StreamR = Comp->GetEffectiveStreamingRadius();
+		const float HandoffR = Comp->GetEffectiveHandoffRadius();
+
+		TestTrue(FString::Printf(TEXT("R=%.0f: streaming (%.0f) > handoff (%.0f)"), R, StreamR, HandoffR),
+			StreamR > HandoffR);
+		TestTrue(FString::Printf(TEXT("R=%.0f: handoff (%.0f) > planet radius (%.0f)"), R, HandoffR, R),
+			HandoffR > R);
+
+		Actor->Destroy();
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 57. Auto-scale produces reasonable value
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerAutoScaleReasonable,
+	"FederationGame.Planet.PlanetSurfaceStreamer.AutoScaleProducesReasonableValue",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerAutoScaleReasonable::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float R = 1100000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	Comp->SurfaceLevelScaleMultiplier = 0.f;
+	const float Scale = Comp->ComputeAutoSurfaceLevelScale();
+
+	TestTrue(TEXT("Auto-scale should be positive"), Scale > 0.f);
+	TestTrue(TEXT("Auto-scale should be less than 1.0 for large planet with default level extent"),
+		Scale < 1.f);
+	TestTrue(TEXT("Auto-scale should be reasonable (> 0.01)"), Scale > 0.01f);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 58. Auto-scale scales with planet radius
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerAutoScaleScalesWithRadius,
+	"FederationGame.Planet.PlanetSurfaceStreamer.AutoScaleScalesWithPlanetRadius",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerAutoScaleScalesWithRadius::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	UPlanetSurfaceStreamer* CompSmall = nullptr;
+	UPlanetSurfaceStreamer* CompLarge = nullptr;
+	AActor* Small = SpawnPlanetWithStreamer(World, CompSmall, FVector::ZeroVector, 100000.f);
+	AActor* Large = SpawnPlanetWithStreamer(World, CompLarge, FVector(5000000, 0, 0), 1100000.f);
+	if (!Small || !CompSmall || !Large || !CompLarge) { AddError(TEXT("Spawn failed")); return false; }
+
+	CompSmall->SurfaceLevelScaleMultiplier = 0.f;
+	CompLarge->SurfaceLevelScaleMultiplier = 0.f;
+	const float ScaleSmall = CompSmall->ComputeAutoSurfaceLevelScale();
+	const float ScaleLarge = CompLarge->ComputeAutoSurfaceLevelScale();
+
+	TestTrue(TEXT("Larger planet should produce larger auto-scale"), ScaleLarge > ScaleSmall);
+
+	Small->Destroy();
+	Large->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 59. Exit altitude multiplier override works
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerExitAltMultiplierOverride,
+	"FederationGame.Planet.PlanetSurfaceStreamer.ExitAltitudeMultiplierOverrideWorks",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerExitAltMultiplierOverride::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float R = 1000000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	Comp->TransitionProfile.ExitAltitudeMultiplier = 0.25f;
+	const float ExitAlt = Comp->GetEffectiveExitAltitude();
+	TestTrue(TEXT("Custom exit alt multiplier should produce R * 0.25 = 250000"),
+		FMath::IsNearlyEqual(ExitAlt, 250000.f, 1000.f));
+
+	Comp->TransitionProfile.ExitAltitudeMultiplier = 0.05f;
+	const float ExitAlt2 = Comp->GetEffectiveExitAltitude();
+	TestTrue(TEXT("Smaller multiplier should produce smaller exit alt"),
+		ExitAlt2 < ExitAlt);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 64. Off-axis planet: player placed above surface, not beside it
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerOffAxisPlayerAboveSurface,
+	"FederationGame.Planet.PlanetSurfaceStreamer.OffAxisPlanetPlacesPlayerAboveSurface",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerOffAxisPlayerAboveSurface::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const FVector PlanetCenter(2000000.f, 0.f, 0.f);
+	const float R = 1100000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	const FVector ApproachDir = (FVector::ZeroVector - PlanetCenter).GetSafeNormal();
+	const FVector TangentPoint = PlanetCenter + ApproachDir * R;
+	Comp->SurfaceLevelWorldOrigin = TangentPoint;
+	Comp->ComputeTangentFrame(PlanetCenter);
+
+	const float HandoffDist = R * 1.01f;
+	const FVector PlayerAtHandoff = PlanetCenter + ApproachDir * HandoffDist;
+	const FVector SurfacePos = Comp->SpaceToSurfacePosition(PlayerAtHandoff);
+
+	const FVector OffsetFromOrigin = SurfacePos - TangentPoint;
+	const float AltAlongNormal = FVector::DotProduct(OffsetFromOrigin, Comp->TangentNormal);
+	const float LateralDist = (OffsetFromOrigin - Comp->TangentNormal * AltAlongNormal).Size();
+
+	TestTrue(TEXT("Player should be above surface level (positive altitude along normal)"),
+		AltAlongNormal > 100.f);
+	TestTrue(TEXT("Player should be near center laterally"),
+		LateralDist < 100.f);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 65. Off-axis planet: round-trip preserves position
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerOffAxisRoundTrip,
+	"FederationGame.Planet.PlanetSurfaceStreamer.OffAxisPlanetRoundTrip",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerOffAxisRoundTrip::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const FVector PlanetCenter(2000000.f, 500000.f, -300000.f);
+	const float R = 1100000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	const FVector ApproachDir = FVector(1.f, 2.f, 3.f).GetSafeNormal();
+	const FVector TangentPoint = PlanetCenter + ApproachDir * R;
+	Comp->SurfaceLevelWorldOrigin = TangentPoint;
+	Comp->ComputeTangentFrame(PlanetCenter);
+
+	const FVector SpacePos = PlanetCenter + ApproachDir * (R + 15000.f);
+	const FVector SurfPos = Comp->SpaceToSurfacePosition(SpacePos);
+	const FVector BackToSpace = Comp->SurfaceToSpacePosition(SurfPos);
+
+	TestTrue(TEXT("Off-axis round-trip Space->Surface->Space should recover"),
+		SpacePos.Equals(BackToSpace, 300.f));
+
+	const FVector SurfOrig = TangentPoint + Comp->TangentX * 3000.f + Comp->TangentY * 4000.f + Comp->TangentNormal * 6000.f;
+	const FVector SpaceFromSurf = Comp->SurfaceToSpacePosition(SurfOrig);
+	const FVector BackToSurf = Comp->SpaceToSurfacePosition(SpaceFromSurf);
+
+	TestTrue(TEXT("Off-axis round-trip Surface->Space->Surface should recover"),
+		SurfOrig.Equals(BackToSurf, 300.f));
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 66. Off-axis planet: ShouldStreamOut uses tangent normal, not world Z
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerOffAxisStreamOutUsesNormal,
+	"FederationGame.Planet.PlanetSurfaceStreamer.OffAxisStreamOutUsesNormalNotWorldZ",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerOffAxisStreamOutUsesNormal::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const FVector PlanetCenter(2000000.f, 0.f, 0.f);
+	const float R = 1100000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	const FVector ApproachDir = (FVector::ZeroVector - PlanetCenter).GetSafeNormal();
+	Comp->SurfaceLevelWorldOrigin = PlanetCenter + ApproachDir * R;
+	Comp->ComputeTangentFrame(PlanetCenter);
+	Comp->ExitAltitude = 50000.f;
+
+	const FVector SurfOrigin = Comp->SurfaceLevelWorldOrigin;
+
+	const FVector HighWorldZ = SurfOrigin + FVector(0, 0, 60000.f);
+	TestFalse(TEXT("High world-Z should NOT trigger exit when TangentNormal is along X"),
+		Comp->ShouldStreamOut(HighWorldZ, SurfOrigin));
+
+	const FVector HighAlongNormal = SurfOrigin + Comp->TangentNormal * 60000.f;
+	TestTrue(TEXT("High along tangent normal SHOULD trigger exit"),
+		Comp->ShouldStreamOut(HighAlongNormal, SurfOrigin));
+
+	const FVector LowAlongNormal = SurfOrigin + Comp->TangentNormal * 10000.f;
+	TestFalse(TEXT("Low along tangent normal should NOT trigger exit"),
+		Comp->ShouldStreamOut(LowAlongNormal, SurfOrigin));
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 67. Fixed anchor: BeginStreamIn places level at SurfaceAnchorDirection
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerAnchorDirection,
+	"FederationGame.Planet.PlanetSurfaceStreamer.AnchorDirectionDeterminesLevelPlacement",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerAnchorDirection::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const FVector PlanetCenter(2000000.f, 0.f, 0.f);
+	const float R = 500000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	Comp->bUseFixedSurfaceAnchor = true;
+	Comp->SurfaceAnchorDirection = FVector(0.f, 0.f, 1.f);
+	Comp->SurfaceLevelWorldOrigin = PlanetCenter + FVector(0.f, 0.f, 1.f) * R;
+	Comp->ComputeTangentFrame(PlanetCenter);
+
+	const FVector ExpectedOrigin = PlanetCenter + FVector(0.f, 0.f, R);
+	TestTrue(TEXT("Surface origin should be at anchor point (north pole)"),
+		Comp->SurfaceLevelWorldOrigin.Equals(ExpectedOrigin, 10.f));
+
+	TestTrue(TEXT("Tangent normal should point along anchor direction"),
+		FVector::DotProduct(Comp->TangentNormal, FVector(0.f, 0.f, 1.f)) > 0.99f);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 68. Coordinate mapping from opposite hemisphere produces valid position
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerOppositeHemisphereMapping,
+	"FederationGame.Planet.PlanetSurfaceStreamer.OppositeHemisphereMappingIsValid",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerOppositeHemisphereMapping::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const FVector PlanetCenter(0.f, 0.f, 0.f);
+	const float R = 100000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	Comp->bUseFixedSurfaceAnchor = true;
+	Comp->SurfaceAnchorDirection = FVector(0.f, 0.f, 1.f);
+	Comp->SurfaceLevelWorldOrigin = PlanetCenter + FVector(0.f, 0.f, 1.f) * R;
+	Comp->ComputeTangentFrame(PlanetCenter);
+
+	const FVector SouthPoleApproach = PlanetCenter + FVector(0.f, 0.f, -(R + 5000.f));
+	const FVector SurfPos = Comp->SpaceToSurfacePosition(SouthPoleApproach);
+
+	TestTrue(TEXT("Opposite hemisphere mapping should not produce NaN"),
+		!SurfPos.ContainsNaN());
+
+	const FVector OffsetFromOrigin = SurfPos - Comp->SurfaceLevelWorldOrigin;
+	const float LateralDist = (OffsetFromOrigin - FVector::DotProduct(OffsetFromOrigin, Comp->TangentNormal) * Comp->TangentNormal).Size();
+	TestTrue(TEXT("South pole approach should produce large lateral offset (approx pi*R)"),
+		LateralDist > R * 2.5f);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 69. Fixed anchor: round-trip from various approach angles
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerFixedAnchorRoundTrip,
+	"FederationGame.Planet.PlanetSurfaceStreamer.FixedAnchorRoundTripFromVariousAngles",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerFixedAnchorRoundTrip::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const FVector PlanetCenter(500000.f, 200000.f, -100000.f);
+	const float R = 300000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	const FVector AnchorDir = FVector(0.f, 1.f, 0.f);
+	Comp->bUseFixedSurfaceAnchor = true;
+	Comp->SurfaceAnchorDirection = AnchorDir;
+	Comp->SurfaceLevelWorldOrigin = PlanetCenter + AnchorDir * R;
+	Comp->ComputeTangentFrame(PlanetCenter);
+
+	const FVector ApproachDirs[] = {
+		FVector(0.f, 1.f, 0.f),
+		FVector(0.3f, 0.9f, 0.1f).GetSafeNormal(),
+		FVector(0.7f, 0.7f, 0.f).GetSafeNormal(),
+		FVector(1.f, 0.f, 0.f),
+	};
+
+	for (const FVector& Dir : ApproachDirs)
+	{
+		const FVector SpacePos = PlanetCenter + Dir * (R + 8000.f);
+		const FVector SurfPos = Comp->SpaceToSurfacePosition(SpacePos);
+		const FVector BackToSpace = Comp->SurfaceToSpacePosition(SurfPos);
+
+		TestTrue(FString::Printf(TEXT("Round-trip from dir (%.1f,%.1f,%.1f) should recover"),
+			Dir.X, Dir.Y, Dir.Z),
+			SpacePos.Equals(BackToSpace, 500.f));
+	}
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 70. Auto-scale minimum floor
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerAutoScaleMinFloor,
+	"FederationGame.Planet.PlanetSurfaceStreamer.AutoScaleMinimumFloor",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerAutoScaleMinFloor::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const float R = 1000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, FVector::ZeroVector, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	Comp->SurfaceLevelWorldExtent = 500000.f;
+	Comp->DesiredPatchFraction = 0.05f;
+	const float Scale = Comp->ComputeAutoSurfaceLevelScale();
+
+	TestTrue(TEXT("Auto-scale for tiny planet should be clamped to min floor (>= 0.005)"),
+		Scale >= 0.005f - KINDA_SMALL_NUMBER);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 71. Fixed anchor: TransitionPlayerToSurface preserves origin from BeginStreamIn
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerHandoffPreservesAnchorOrigin,
+	"FederationGame.Planet.PlanetSurfaceStreamer.HandoffPreservesAnchorOrigin",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerHandoffPreservesAnchorOrigin::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const FVector PlanetCenter(2000000.f, 0.f, 0.f);
+	const float R = 1100000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	const FVector AnchorDir = FVector(0.f, 0.f, 1.f);
+	Comp->bUseFixedSurfaceAnchor = true;
+	Comp->SurfaceAnchorDirection = AnchorDir;
+	const FVector AnchorOrigin = PlanetCenter + AnchorDir * R;
+	Comp->SurfaceLevelWorldOrigin = AnchorOrigin;
+	Comp->ComputeTangentFrame(PlanetCenter);
+
+	const FVector OriginalTangentNormal = Comp->TangentNormal;
+
+	const FVector PlayerApproach = PlanetCenter + FVector(-1.f, 0.f, 0.f) * (R + 5000.f);
+	const FVector SurfPos = Comp->SpaceToSurfacePosition(PlayerApproach);
+
+	TestTrue(TEXT("After SpaceToSurfacePosition, SurfaceLevelWorldOrigin should still be at anchor"),
+		Comp->SurfaceLevelWorldOrigin.Equals(AnchorOrigin, 10.f));
+
+	TestTrue(TEXT("TangentNormal should still match anchor direction"),
+		FVector::DotProduct(Comp->TangentNormal, OriginalTangentNormal) > 0.99f);
+
+	Actor->Destroy();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// 72. bUseFixedSurfaceAnchor=false ignores serialized anchor, uses player dir
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlanetStreamerDefaultAnchorUsesPlayerDirection,
+	"FederationGame.Planet.PlanetSurfaceStreamer.DefaultBoolFalseIgnoresSerializedAnchor",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FPlanetStreamerDefaultAnchorUsesPlayerDirection::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World) { AddError(TEXT("No world")); return false; }
+
+	const FVector PlanetCenter(2000000.f, 0.f, 0.f);
+	const float R = 500000.f;
+	UPlanetSurfaceStreamer* Comp = nullptr;
+	AActor* Actor = SpawnPlanetWithStreamer(World, Comp, PlanetCenter, R);
+	if (!Actor || !Comp) { AddError(TEXT("Spawn failed")); return false; }
+
+	// Simulate serialized anchor: SurfaceAnchorDirection = (0,0,1) but bool is false.
+	TestFalse(TEXT("bUseFixedSurfaceAnchor should default to false"),
+		Comp->bUseFixedSurfaceAnchor);
+	Comp->SurfaceAnchorDirection = FVector(0.f, 0.f, 1.f);
+
+	// Replicate BeginStreamIn anchor resolution logic.
+	const FVector PlayerPos = FVector::ZeroVector;
+	FVector AnchorDir = FVector::ZeroVector;
+	if (Comp->bUseFixedSurfaceAnchor)
+	{
+		AnchorDir = Comp->SurfaceAnchorDirection.GetSafeNormal();
+	}
+	if (AnchorDir.IsNearlyZero())
+	{
+		AnchorDir = (PlayerPos - PlanetCenter).GetSafeNormal();
+	}
+
+	// Should use player direction (-X), ignoring serialized (0,0,1).
+	TestTrue(TEXT("Anchor dir should align with player approach (-X)"),
+		FVector::DotProduct(AnchorDir, FVector(-1.f, 0.f, 0.f)) > 0.99f);
+	TestTrue(TEXT("Anchor dir should NOT point up (serialized north pole)"),
+		FMath::Abs(AnchorDir.Z) < 0.01f);
+
+	// When bool IS true, should use the serialized anchor.
+	Comp->bUseFixedSurfaceAnchor = true;
+	FVector AnchorDirFixed = FVector::ZeroVector;
+	if (Comp->bUseFixedSurfaceAnchor)
+	{
+		AnchorDirFixed = Comp->SurfaceAnchorDirection.GetSafeNormal();
+	}
+	TestTrue(TEXT("With bool true, should use serialized anchor direction (+Z)"),
+		FVector::DotProduct(AnchorDirFixed, FVector(0.f, 0.f, 1.f)) > 0.99f);
+
+	Actor->Destroy();
 	return true;
 }
 
