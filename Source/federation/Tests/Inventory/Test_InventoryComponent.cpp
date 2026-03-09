@@ -184,6 +184,26 @@ bool FInventoryQuestItemBypassesWeight::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInventoryWeightIncludesEquipped,
+	"FederationGame.Inventory.Component.WeightIncludesEquippedItems",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FInventoryWeightIncludesEquipped::RunTest(const FString& Parameters)
+{
+	UInventoryComponent* Inv = MakeInventory();
+	UEquipmentItem* Helmet = NewObject<UEquipmentItem>();
+	Helmet->Slot = EEquipmentSlot::Head;
+	Helmet->Weight = 5.f;
+	Inv->AddItem(Helmet);
+	const float WeightBefore = Inv->GetCurrentWeight();
+
+	Inv->EquipItem(Helmet);
+	TestEqual(TEXT("Weight should be unchanged after equipping"), Inv->GetCurrentWeight(), WeightBefore);
+	return true;
+}
+
 // ---------------------------------------------------------------------------
 // Equip / Unequip
 // ---------------------------------------------------------------------------
@@ -203,6 +223,49 @@ bool FInventoryEquipWeapon::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Equip should succeed"), Inv->EquipItem(Pistol));
 	TestEqual(TEXT("Primary slot should hold pistol"),
 		Inv->GetEquippedItem(EEquipmentSlot::PrimaryWeapon), static_cast<UItemBase*>(Pistol));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInventoryEquipRemovesFromItems,
+	"FederationGame.Inventory.Component.EquipRemovesFromItems",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FInventoryEquipRemovesFromItems::RunTest(const FString& Parameters)
+{
+	UInventoryComponent* Inv = MakeInventory();
+	UEquipmentItem* Helmet = NewObject<UEquipmentItem>();
+	Helmet->Slot = EEquipmentSlot::Head;
+	Helmet->Weight = 2.f;
+	Inv->AddItem(Helmet);
+	TestTrue(TEXT("Item in inventory before equip"), Inv->HasItem(Helmet));
+
+	Inv->EquipItem(Helmet);
+	TestFalse(TEXT("Item removed from items after equip"), Inv->HasItem(Helmet));
+	TestNotNull(TEXT("Item is in equipped slot"), Inv->GetEquippedItem(EEquipmentSlot::Head));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInventoryUnequipRestoresToItems,
+	"FederationGame.Inventory.Component.UnequipRestoresToItems",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FInventoryUnequipRestoresToItems::RunTest(const FString& Parameters)
+{
+	UInventoryComponent* Inv = MakeInventory();
+	UEquipmentItem* Helmet = NewObject<UEquipmentItem>();
+	Helmet->Slot = EEquipmentSlot::Head;
+	Helmet->Weight = 2.f;
+	Inv->AddItem(Helmet);
+	Inv->EquipItem(Helmet);
+	TestFalse(TEXT("Not in items while equipped"), Inv->HasItem(Helmet));
+
+	Inv->UnequipSlot(EEquipmentSlot::Head);
+	TestTrue(TEXT("Back in items after unequip"), Inv->HasItem(Helmet));
+	TestNull(TEXT("Slot is empty after unequip"), Inv->GetEquippedItem(EEquipmentSlot::Head));
 	return true;
 }
 
@@ -265,6 +328,7 @@ bool FInventoryUnequipSlot::RunTest(const FString& Parameters)
 	UItemBase* Removed = Inv->UnequipSlot(EEquipmentSlot::PrimaryWeapon);
 	TestEqual(TEXT("Should return the pistol"), Removed, static_cast<UItemBase*>(Pistol));
 	TestNull(TEXT("Slot should now be empty"), Inv->GetEquippedItem(EEquipmentSlot::PrimaryWeapon));
+	TestTrue(TEXT("Pistol should be back in items"), Inv->HasItem(Pistol));
 	return true;
 }
 
@@ -338,7 +402,7 @@ bool FInventoryDelegateFires::RunTest(const FString& Parameters)
 }
 
 // ---------------------------------------------------------------------------
-// Character integration
+// Starter items (character integration)
 // ---------------------------------------------------------------------------
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -364,6 +428,35 @@ bool FCharacterHasInventoryComponent::RunTest(const FString& Parameters)
 	}
 
 	TestNotNull(TEXT("Character should have an InventoryComponent"), Character->InventoryComp.Get());
+
+	Character->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCharacterStarterItemsPresent,
+	"FederationGame.Inventory.Character.StarterItemsPresent",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter
+)
+
+bool FCharacterStarterItemsPresent::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEngine->GetWorldContexts()[0].World();
+	if (!World)
+	{
+		AddError(TEXT("No world context available"));
+		return false;
+	}
+
+	AFederationCharacter* Character = World->SpawnActor<AFederationCharacter>();
+	if (!Character || !Character->InventoryComp)
+	{
+		AddError(TEXT("Failed to spawn character or missing InventoryComp"));
+		return false;
+	}
+
+	TestTrue(TEXT("Inventory should have starter items"), Character->InventoryComp->GetItems().Num() > 0);
+	TestTrue(TEXT("Total weight should be positive"), Character->InventoryComp->GetCurrentWeight() > 0.f);
 
 	Character->Destroy();
 	return true;

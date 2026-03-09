@@ -113,6 +113,7 @@ bool UInventoryComponent::EquipItem(UItemBase* Item)
 		return false;
 	}
 
+	RemoveItem(Item, 1);
 	EquippedItems.Add(TargetSlot, Item);
 	OnInventoryChanged.Broadcast();
 	OnNativeInventoryChanged.Broadcast();
@@ -129,8 +130,7 @@ UItemBase* UInventoryComponent::UnequipSlot(EEquipmentSlot Slot)
 
 	UItemBase* Removed = *Found;
 	EquippedItems.Remove(Slot);
-	OnInventoryChanged.Broadcast();
-	OnNativeInventoryChanged.Broadcast();
+	AddItem(Removed, 1);
 	return Removed;
 }
 
@@ -148,6 +148,13 @@ float UInventoryComponent::GetCurrentWeight() const
 		if (Entry.ItemDef && !Entry.ItemDef->bIsQuestItem)
 		{
 			Total += Entry.ItemDef->Weight * Entry.Count;
+		}
+	}
+	for (const auto& Pair : EquippedItems)
+	{
+		if (Pair.Value && !Pair.Value->bIsQuestItem)
+		{
+			Total += Pair.Value->Weight;
 		}
 	}
 	return Total;
