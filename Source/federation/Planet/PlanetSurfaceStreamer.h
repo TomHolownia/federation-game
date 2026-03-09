@@ -131,10 +131,10 @@ public:
 	FString SurfaceLevelPath;
 
 	/** Direction from the planet center to the anchor point where the surface level center is placed.
-	 *  Zero (default) = level is placed facing the player's approach direction each time.
-	 *  Non-zero = fixed geographic anchor (e.g. (0,0,1) for north pole). */
+	 *  The level is geographically fixed: approaching from any direction maps to the correct surface XY
+	 *  via angular offset from this anchor. Default (0,0,1) = "north pole." */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Streaming")
-	FVector SurfaceAnchorDirection = FVector::ZeroVector;
+	FVector SurfaceAnchorDirection = FVector::UpVector;
 
 	/**
 	 * Scale applied to the streamed surface level.
