@@ -7,7 +7,6 @@
       "Scale": [22000, 22000, 22000],
       "Properties": {
         "StaticMesh": "/Engine/BasicShapes/Sphere.Sphere",
-        "SurfaceLevelPath": "/Game/Planets/PlanetSurface_Test",
         "SurfaceGravityScale": 1,
         "MaxInfluenceDistanceMultiplier": 8,
         "Material": "Blue",
@@ -21,7 +20,6 @@
       "Scale": [10000, 10000, 10000],
       "Properties": {
         "StaticMesh": "/Engine/BasicShapes/Sphere.Sphere",
-        "SurfaceLevelPath": "/Game/Planets/MoonSurface_Test",
         "SurfaceGravityScale": 0.25,
         "MaxInfluenceDistanceMultiplier": 6,
         "Material": "Red",

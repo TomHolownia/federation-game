@@ -10,7 +10,7 @@ class UTextBlock;
 
 /**
  * Developer-only diagnostics overlay (UMG).
- * Shows speed, streaming state, jetpack status.
+ * Shows speed and jetpack status.
  * Toggled with the tilde (`) key; not shown to players in shipping builds.
  */
 UCLASS()
@@ -27,12 +27,6 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> SpeedText;
-
-	UPROPERTY()
-	TObjectPtr<UTextBlock> LevelText;
-
-	UPROPERTY()
-	TObjectPtr<UTextBlock> StreamText;
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> JetpackEnabledText;

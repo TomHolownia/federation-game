@@ -106,4 +106,36 @@ They address different problems and work together: precise coordinates everywher
 
 ---
 
-*References: Epic’s “Large World Coordinates in Unreal Engine 5” and “Large World Coordinates Rendering”; project docs `ue5-project-setup.md`, `ai-workflow-and-galaxy-scale.md`.*
+## 8. Implications for Planet Architecture
+
+The new seamless planet architecture (all planets in one solar system level, no separate surface levels) relies on LWC in the following ways:
+
+### CPU Positions Are Correct at Solar System Scale
+
+With LWC (double precision), a solar system at 1/10 real scale has:
+- Planet radius: ~6.37e8 UU
+- Low orbit altitude: ~4e7 UU above surface
+- Two planets separated by ~1e13 UU
+
+All of these are within the comfortable range of `double` (sub-millimeter accuracy). No position data is lost.
+
+### GPU Rendering Is Always Camera-Relative
+
+The GPU still uses 32-bit floats. UE5 translates all world positions to **camera-relative** 32-bit coordinates before GPU submission. This means:
+- A rock 2m away from the camera has perfect float precision
+- The planet surface 1km below an orbiting ship has acceptable float precision
+- Distant planets (rendered as backdrop) are in a separate depth pass
+
+You do not need to do anything special for this — it is automatic with LWC enabled.
+
+### GPU Shader Caveat
+
+Shaders that sample `AbsoluteWorldPosition` (e.g., world-aligned texture materials) may exhibit subtle jitter at very large distances because the GPU receives a float-precision world position. This is an upstream UE5 limitation (“Large World Coordinates on GPU” is on Epic’s roadmap but not yet complete as of UE5.7). At solar system scale, this only affects materials on the planet sphere visible from deep space — not a practical problem at current development stage.
+
+### Origin Rebasing Is Required for Long Play Sessions
+
+LWC solves precision for the simulation. But if the player travels far from the world origin and the camera-relative float representation accumulates, physics simulation can still drift over very long sessions. **World origin rebasing** (`UWorld::SetNewWorldOrigin()`) resets the origin to the player’s position periodically, keeping the float representation fresh. This is deferred to the next PR but must be implemented before any extended playtesting at solar system scale.
+
+---
+
+*References: Epic’s “Large World Coordinates in Unreal Engine 5” and “Large World Coordinates Rendering”; project docs `ue5-project-setup.md`, `ai-workflow-and-galaxy-scale.md`, `planet-rendering-architecture.md`.*

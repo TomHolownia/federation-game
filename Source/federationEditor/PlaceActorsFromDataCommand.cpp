@@ -357,7 +357,7 @@ void FPlaceActorsFromDataCommand::Execute(const FString& RelativeFileName)
 					ApplyPropertiesFromJson(SMComp, MergedProps);
 				}
 				// Generic component pass: apply matching properties on every component type
-				// (e.g. SurfaceLevelPath on PlanetSurfaceStreamer, SurfaceGravityScale on gravity source).
+				// (e.g. SurfaceGravityScale on PlanetGravitySourceComponent).
 				TInlineComponentArray<UActorComponent*> AllComponents;
 				Spawned->GetComponents(AllComponents);
 				for (UActorComponent* Component : AllComponents)

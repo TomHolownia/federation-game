@@ -18,14 +18,6 @@ class FEDERATION_API AFederationGameState : public AGameStateBase
 public:
 	AFederationGameState(const FObjectInitializer& ObjectInitializer);
 
-	/** Current planet streaming state for dev HUD (Idle, Loading, OnSurface, Unloading). */
-	UPROPERTY(BlueprintReadOnly, Category = "Dev")
-	FString DebugStreamingState;
-
-	/** Name of the streamed level when relevant (e.g. "PlanetSurface_Test"). */
-	UPROPERTY(BlueprintReadOnly, Category = "Dev")
-	FString DebugStreamingLevelName;
-
 	/** Whether the player's jetpack is currently enabled. */
 	UPROPERTY(BlueprintReadOnly, Category = "Dev")
 	bool DebugJetpackEnabled = false;

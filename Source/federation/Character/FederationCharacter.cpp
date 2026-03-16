@@ -116,32 +116,9 @@ void AFederationCharacter::BeginPlay()
 	AddStarterItems();
 }
 
-bool AFederationCharacter::IsUsingFlatGravity() const
-{
-	if (!GravityComp || !GravityComp->IsComponentTickEnabled())
-	{
-		return true;
-	}
-	return GravityComp->GetSurfaceBlendAlpha() >= 0.5f;
-}
-
 bool AFederationCharacter::IsJetpackEnabled() const
 {
 	return JetpackComponent && JetpackComponent->IsJetpackEnabled();
-}
-
-void AFederationCharacter::UpdateCameraForFlatMode()
-{
-	if (!Controller) return;
-	const FRotator ControlRot = Controller->GetControlRotation();
-	if (FirstPersonCameraRoot)
-	{
-		FirstPersonCameraRoot->SetWorldRotation(ControlRot);
-	}
-	if (ThirdPersonSpringArm)
-	{
-		ThirdPersonSpringArm->SetWorldRotation(ControlRot);
-	}
 }
 
 void AFederationCharacter::InitializeSpaceViewFromCurrent()
@@ -215,14 +192,9 @@ void AFederationCharacter::Tick(float DeltaSeconds)
 
 	const bool bIsFalling = GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Falling;
 
-	if (IsJetpackEnabled() || (bIsFalling && !IsUsingFlatGravity()))
+	if (IsJetpackEnabled() || bIsFalling)
 	{
 		UpdateCameraForSpaceMode();
-	}
-	else if (IsUsingFlatGravity())
-	{
-		UpdateCameraForFlatMode();
-		bSpaceViewInitialized = false;
 	}
 
 	bJetpackActive = IsJetpackEnabled();
@@ -308,11 +280,6 @@ void AFederationCharacter::OnMoveForward(const FInputActionValue& Value)
 	{
 		Dir = FirstPersonCameraRoot ? FirstPersonCameraRoot->GetForwardVector() : Controller->GetControlRotation().Vector();
 	}
-	else if (IsUsingFlatGravity())
-	{
-		const FRotator YawRotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
-		Dir = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	}
 	else
 	{
 		const FVector GravDir = GravityComp->GetGravityDirection();
@@ -347,11 +314,6 @@ void AFederationCharacter::OnMoveRight(const FInputActionValue& Value)
 	if (IsJetpackEnabled())
 	{
 		Dir = FirstPersonCameraRoot ? FirstPersonCameraRoot->GetRightVector() : FRotationMatrix(Controller->GetControlRotation()).GetUnitAxis(EAxis::Y);
-	}
-	else if (IsUsingFlatGravity())
-	{
-		const FRotator YawRotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
-		Dir = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 	}
 	else
 	{
@@ -390,16 +352,7 @@ void AFederationCharacter::OnLook(const FInputActionValue& Value)
 	}
 	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Falling)
 	{
-		if (!IsUsingFlatGravity())
-		{
-			ApplySpaceLookInput(Look.X, -Look.Y);
-			return;
-		}
-	}
-	if (IsUsingFlatGravity())
-	{
-		AddControllerYawInput(Look.X);
-		AddControllerPitchInput(-Look.Y);  // Invert pitch so mouse up = look up on surface
+		ApplySpaceLookInput(Look.X, -Look.Y);
 		return;
 	}
 	if (GravityComp && GravityComp->bUseGravityRelativeLook && GravityComp->bAlignToGravity && !GravityComp->GetGravityDirection().IsNearlyZero())
@@ -422,15 +375,7 @@ void AFederationCharacter::OnLookYaw(const FInputActionValue& Value)
 	}
 	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Falling)
 	{
-		if (!IsUsingFlatGravity())
-		{
-			ApplySpaceLookInput(Amount, 0.f);
-			return;
-		}
-	}
-	if (IsUsingFlatGravity())
-	{
-		AddControllerYawInput(Amount);
+		ApplySpaceLookInput(Amount, 0.f);
 		return;
 	}
 	if (GravityComp && GravityComp->bUseGravityRelativeLook && GravityComp->bAlignToGravity && !GravityComp->GetGravityDirection().IsNearlyZero())
@@ -452,15 +397,7 @@ void AFederationCharacter::OnLookPitch(const FInputActionValue& Value)
 	}
 	if (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Falling)
 	{
-		if (!IsUsingFlatGravity())
-		{
-			ApplySpaceLookInput(0.f, -Amount);
-			return;
-		}
-	}
-	if (IsUsingFlatGravity())
-	{
-		AddControllerPitchInput(-Amount);  // Invert pitch so mouse up = look up on surface
+		ApplySpaceLookInput(0.f, -Amount);
 		return;
 	}
 	if (GravityComp && GravityComp->bUseGravityRelativeLook && GravityComp->bAlignToGravity && !GravityComp->GetGravityDirection().IsNearlyZero())
@@ -477,7 +414,7 @@ void AFederationCharacter::OnRoll(const FInputActionValue& Value)
 	if (!Controller) return;
 
 	const bool bSpaceLike = IsJetpackEnabled()
-		|| ((GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Falling) && !IsUsingFlatGravity());
+		|| (GetCharacterMovement() && GetCharacterMovement()->MovementMode == MOVE_Falling);
 	if (!bSpaceLike) return;
 
 	const float DeltaSeconds = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
