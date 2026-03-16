@@ -6,20 +6,17 @@
 #include "Engine/StaticMeshActor.h"
 #include "Planet.generated.h"
 
-class UPlanetSurfaceStreamer;
 class UPlanetGravitySourceComponent;
 class UWaypointComponent;
 
 /**
- * Planet actor that always has a PlanetSurfaceStreamer attached.
- * Use this instead of a plain StaticMeshActor for any celestial body that
- * supports surface streaming. The streamer is created by default so you don't
- * need to add it manually after each editor restart.
+ * Planet actor representing a celestial body in the solar system level.
+ * All planets exist as sphere meshes in the single shared world space — there
+ * are no separate surface levels. Terrain and surface detail stream in via the
+ * spherical quadtree LOD system as the player approaches.
  *
- * Assign your planet mesh to the static mesh component as usual. Set
- * SurfaceLevelPath on the PlanetSurfaceStreamer component to the level to
- * stream when the player approaches. StreamingRadius = 0 (default) uses
- * adaptive radius from planet size and approach speed.
+ * Assign your sphere mesh to the static mesh component. Gravity falloff and
+ * sphere-of-influence are configured on PlanetGravitySource.
  */
 UCLASS(ClassGroup = "Federation", meta = (DisplayName = "Planet"))
 class FEDERATION_API APlanet : public AStaticMeshActor
@@ -28,10 +25,6 @@ class FEDERATION_API APlanet : public AStaticMeshActor
 
 public:
 	APlanet(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
-
-	/** Streamer is always present; configure SurfaceLevelPath and options in Details. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Planet")
-	TObjectPtr<UPlanetSurfaceStreamer> PlanetSurfaceStreamer;
 
 	/** Per-planet gravity source tuning. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Planet")

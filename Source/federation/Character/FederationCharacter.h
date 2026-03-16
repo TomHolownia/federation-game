@@ -116,10 +116,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TObjectPtr<UInventoryComponent> InventoryComp;
 
-	/** True when using flat gravity (e.g. on streamed surface level). When true, movement/look use control rotation and camera is driven from controller. */
-	UFUNCTION(BlueprintCallable, Category = "Gravity")
-	bool IsUsingFlatGravity() const;
-
 	// --- Jetpack ---
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement|Jetpack")
@@ -136,10 +132,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Movement|Jetpack")
 	bool IsJetpackEnabled() const;
-
-	/** Syncs first- and third-person camera to the controller's control rotation. Used in flat mode each tick; exposed for tests. */
-	UFUNCTION(BlueprintCallable, Category = "Camera")
-	void UpdateCameraForFlatMode();
 
 protected:
 	virtual void BeginPlay() override;

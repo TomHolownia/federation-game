@@ -1,173 +1,284 @@
-# AI Workflow & Galaxy-Scale Architecture
+# Galaxy-Scale Architecture
 
-How to scale to a full galaxy without hand-placing content, and how AI can "place" actors via code and data.
+## Overview
 
-## 1. How One Level Scales to a Galaxy
+Federation Game uses a **single shared world space per solar system**. All planets, ships, stations, surface terrain, and actors coexist in one UE5 level at all times — there are no separate surface levels, no teleportation transitions, and no loading screens between space and the ground.
 
-Don't hand-place. Use:
-
-- **Procedural generation** – Code generates positions and properties from algorithms or data.
-- **World Partition** – Only load cells near the player; the rest stays as data.
-- **Large World Coordinates (LWC)** – Precision for galaxy-scale positions.
-- **Data-driven content** – Tables/catalogs drive what gets spawned where.
-
-**What you have:** `AGalaxyStarField` (one actor → thousands of stars in C++). LWC and World Partition are recommended in setup.
-
-| Scale       | Hand-placed? | How |
-|------------|---------------|-----|
-| Galaxy     | No           | One or few generator actors; positions from algorithm or data. |
-| Star systems | Optional   | Procedural when player approaches, or from DataTable/JSON. |
-| Planets    | Rare         | Procedural or templates; hand-craft only hero locations. |
-| Local space | Sometimes  | Small levels; streaming loads when needed. |
-
-**Next steps:** Enable World Partition on the galaxy level. Keep generation in code. Use DataTables/Data Assets for system definitions; C++ or Blueprint spawns from them.
+This document describes the architecture, the systems that exist today, and the implementation roadmap.
 
 ---
 
-## 2. World Partition and scale architecture
+## Why the Old Approach Was Abandoned
 
-The galaxy uses a **hybrid architecture**: one main World Partition level (`DeepSpace`) for space-scale content, and **separate streaming levels per planet surface**. Planet surfaces are streamed in on approach and unloaded on departure, keeping the main level lightweight while allowing dense per-planet content.
+The previous architecture (flat `.umap` surface levels + `UPlanetSurfaceStreamer` teleportation) was incompatible with the game's core vision:
 
-This replaces the earlier "one WP level for everything" approach. A single WP level cannot scale to content-rich planet surfaces because WP uses a flat XY grid that doesn't map to spheres, and planet-scale content density is too large for a single level.
+- **Squares don't sit on spheres.** Flat rectangular World Partition cells cannot tile a sphere surface without gaps, overlaps, and seam artifacts.
+- **No cross-level visibility.** A mountain in one level cannot be seen from another. Surface actors cannot engage spaceships. The ground cannot be seen from orbit.
+- **No seamless atmospheric flight.** Flying continuously from the ground into space is impossible across a hard level boundary.
+- **No shared coordinate space.** Surface and space actors could not interact without elaborate and fragile coordinate mapping.
 
-### Level structure
-
-| Topic | Approach |
-|-------|----------|
-| **Space level** | **`DeepSpace`** with **World Partition** enabled. Contains galaxy-scale content: star fields, skybox, planet sphere visuals, and `UPlanetSurfaceStreamer` components on each planet. |
-| **Planet surfaces** | Each planet has a **separate level** (e.g. `Content/Planets/PlanetSurface_Test.umap`) with its own WP. Loaded dynamically via `ULevelStreamingDynamic` when the player approaches, unloaded when they leave. |
-| **Streaming** | World Partition streams space-level cells by distance. Planet surfaces are streamed as whole sublevels (via `UPlanetSurfaceStreamer`) triggered by proximity to planet spheres. |
-| **Floating origin** | Use a **floating origin**: periodically shift the world so the player stays near (0,0,0) in engine space. This avoids float precision issues across vast distances. Distances in data can be millions of units; the engine sees relative positions. |
-| **Travel** | **Warp / jump** (or very high speed) for crossing vast distances so the player does not spend real time flying through empty space. One coordinate space for space; planet transitions handled by streaming. |
-
-### Level design workflow (do not place at huge coordinates)
-
-You do **not** move the editor camera millions of units and place actors there. Instead:
-
-- **Author each location at origin (local space):** Build each planet/system as a prefab, blueprint, or block with everything around (0,0,0). You never work at galaxy-scale coordinates in the editor.
-- **Data holds world positions:** A data asset or table stores each location's **world position** in the galaxy (e.g. Earth at (0,0,0), New Mars at (1e9, 2e8, 0)). Coordinates can be vast; they are just numbers in data.
-- **Runtime or tool places content:** At runtime (or in a build/editor step), spawn or position each block at its world coordinates. Floating origin is applied so the engine always operates near the origin. Placement-from-data (e.g. Place Actors From Data) can write world positions from this table; the level itself is authored in local chunks.
-
-### Planet surface streaming
-
-Each planet sphere in the space level has a `UPlanetSurfaceStreamer` component (`Source/federation/Planet/PlanetSurfaceStreamer.h`). It manages the full planet approach lifecycle:
-
-1. **Idle** — Player is in space. The streamer checks distance to the player every tick.
-2. **Loading** — Player enters `StreamingRadius`. The streamer calls `ULevelStreamingDynamic::LoadLevelInstance()` with the planet's surface level path.
-3. **OnSurface** — Level is loaded. The player is teleported to `SurfaceSpawnOffset`, the `UPlanetGravityComponent` is disabled (standard downward gravity on flat terrain), and the `OnSurfaceLoaded` delegate fires.
-4. **Unloading** — Player moves beyond `ExitAltitude` from the surface origin. The player is teleported back to their saved space position, gravity is restored, and the surface level is unloaded.
-
-**To add a new planet surface:**
-
-1. Create a level in `Content/Planets/` (e.g. `PlanetSurface_Mars.umap`).
-2. Enable World Partition on it; add terrain, foliage, structures.
-3. In the space level, add `UPlanetSurfaceStreamer` to the planet sphere actor.
-4. Set `SurfaceLevelPath` to the level's long package name (e.g. `/Game/Planets/PlanetSurface_Mars`).
-
-### Planets: gravity and surface
-
-- **In space:** `UPlanetGravityComponent` provides radial gravity toward the nearest planet sphere. The character walks on the sphere surface with full capsule alignment and gravity-relative camera.
-- **On planet surface:** When streamed into a surface level, the gravity component is disabled and standard downward gravity applies. This avoids the radial gravity system fighting with flat terrain. On exit, radial gravity re-engages.
-- **Flat vs curved:** Surface levels use flat terrain (UE5 Landscape with standard gravity). The planet sphere in space provides the "curved world" feel. Future work may support curved terrain in surface levels.
-- **Cities and detail at distance:** Use **impostors**, **low-poly silhouettes**, or **HLOD** for distant cities; stream in full content when the player is within range. LOD as they get closer.
-
-### Stress testing planet surfaces
-
-`APlanetSurfaceStressTest` (`Source/federation/Planet/PlanetSurfaceStressTest.h`) scatters configurable numbers of instanced meshes across a radius. Place it in a surface level to benchmark WP streaming and rendering:
-
-- **InstanceCount** — Number of mesh instances (default 10,000).
-- **ScatterRadius** — Radius to scatter within (default 400,000 UU = 4 km).
-- **Console command:** `Fed.StressTest.SetCount <N>` changes density at runtime.
-
-Test procedure: start at 1K instances, increase to 10K/50K/100K, measure FPS via `stat unit` and `stat scenerendering`. Try different landscape sizes (8×8 km, 16×16 km, 32×32 km) to find WP streaming limits.
-
-### MVP path
-
-- **Phase 1 (done):** Small spherical planet (one mesh), local gravity (force toward center), character that walks on it. SmallPlanet placement preset.
-- **Phase 2 (done):** Mannequin character with first-person view, walking and collision on the planet sphere.
-- **Phase 3 (current — FED-046):** Planet surface streaming MVP. Separate surface level streamed on approach. Stress test actor for performance benchmarking. Tests the hybrid space/surface architecture.
-- **Phase 4 (next):** Add Landscape terrain to the surface level, stress-test with foliage and structures. Evaluate whether origin rebasing (FED-033) is needed at surface scale.
+The new architecture solves all of these at the cost of requiring a custom spherical LOD streaming system.
 
 ---
 
-## 3. How AI Can "Place" Actors
+## Solar System Level Structure
 
-AI can't click in the editor. It can write **code and data** that spawn actors. Workflow: **code-first placement**.
+```
+Content/
+  DeepSpace.umap          — Persistent space level (star field, skybox, distant galaxies)
+  SolarSystem_[Name].umap — One level per solar system (planets, moons, stations, all terrain)
+```
 
-**Canonical pattern: data-defined galaxy**
+Each solar system is a single World Partition level. Planets are `APlanet` sphere mesh actors placed at their correct positions in world space. All surface content (terrain, cities, forests, weather) exists in the same world space as the ships and stations above it.
 
-The whole galaxy is defined in data. An Editor Utility reads it and spawns actors. You never place by hand.
+Deep space between solar systems is handled separately (adjacent `DeepSpace` levels, or procedural generation of star fields without geometry).
 
-| Piece | Purpose |
-|-------|--------|
-| **Data** | One row per generator (e.g. Galaxy StarField): class, transform, parameters (StarCount, GalaxyRadius, …). DataTable or JSON. |
-| **Editor Utility "Setup Galaxy Level"** | Runs in editor. Clears procedural actors (optional), reads data, spawns each actor and sets properties. Run via menu/button to refresh level. |
-| **Spawner code** | Maps each row to actor class and UPROPERTYs. Extend when adding actor types. |
+---
 
-**Workflow:** Edit data → run "Setup Galaxy Level" → level matches data. AI (or you) only touch data and code.
+## Coordinate System
 
-**Other options:** Editor Utilities (C++/Blueprint) or Python editor scripts can spawn actors directly; data-driven is preferred so one source of truth drives the level.
+### Large World Coordinates (LWC)
 
-### Implemented: Place Actors From Data
+LWC is already enabled in this project (`bEnableLargeWorldSupport=True`, `r.LargeWorldRenderPosition=True` in `Config/DefaultEngine.ini`).
 
-The project provides a **Place Actors From Data** command (Level Editor toolbar and **Tools → Federation** menu). It lists all `*.json` files in **Config/PlacementData/**; choose a preset (e.g. **GalaxyMapTest**, **MilkyWaySkybox**) to spawn those actors in the current level. This is the canonical way for an AI agent to "place" actors: add or edit a JSON in that directory, then run the matching preset.
+- **CPU side:** All actor positions (`FVector`, `FTransform`) use 64-bit double precision. A solar system at 1/10 real scale (~60 AU across) sits comfortably within double-precision range with sub-millimeter accuracy.
+- **GPU side:** Rendering is always camera-relative — the engine translates positions into 32-bit floats relative to the camera before submission. Local rendering precision is always perfect regardless of world position.
 
-**Presets included:** `GalaxyMapTest.json` (directional light + galaxy star fields), `MilkyWaySkybox.json` (sky sphere for space background), `SmallPlanet.json` (flat floor + basic lighting for a small planet playable space; see Config/PlacementData/README.txt), `PlanetSurfaceTest.json` (flat ground + stress test actor for surface streaming benchmark). Add more JSON files for custom placement (e.g. specific objects, levels, or procedural setups).
+### Scale Decision: 1/10 Real Scale
 
-**Placement JSON format** (each file in Config/PlacementData/):
+Planets use **1/10 real scale** (the KSP approach):
+
+| Body | Real radius | Game radius (UU) |
+|------|------------|-----------------|
+| Earth-like planet | 6,371 km | 637,100,000 UU (6.37e8) |
+| Moon-like body | 1,737 km | 173,700,000 UU |
+| Orbital altitude (low) | ~400 km | ~40,000,000 UU |
+
+This preserves orbital mechanic ratios (gravity constants work correctly), makes surfaces traversable in minutes not hours, and keeps content density manageable. Distances still feel vast at solar system scale.
+
+### Origin Rebasing
+
+**Status: Deferred to next PR.**
+
+Origin rebasing shifts `UWorld::SetNewWorldOrigin()` so the player is always near (0,0,0), preventing float precision issues in camera-relative transforms over time. UE5 provides this natively. Implementation is straightforward but must be done carefully in multiplayer contexts.
+
+Until implemented, the double-precision LWC system prevents any accuracy problems at the distances used in development.
+
+---
+
+## Planet Representation
+
+Each planet is an `APlanet` actor (inherits `AStaticMeshActor`) placed directly in the solar system level:
+
+- **Sphere mesh** — the visual planet shell. Radius is set via actor scale.
+- **`UPlanetGravitySourceComponent`** — defines gravity strength, falloff exponent, and sphere of influence radius.
+- **`UWaypointComponent`** — HUD navigation marker.
+
+There are no separate surface levels. The planet IS a sphere in world space at all times. Surface terrain will be generated by the spherical quadtree LOD system (see below) as geometry ON the sphere, not in a separate coordinate space.
+
+### Placement Data
+
+Planets are placed using JSON placement data in `Config/PlacementData/`. Example:
 
 ```json
 {
   "Actors": [
     {
-      "Class": "/Script/federation.GalaxyStarField",
-      "Location": [0, 0, 0],
-      "Rotation": [0, 0, 0],
-      "Scale": [1, 1, 1]
+      "Class": "/Script/federation.Planet",
+      "Location": [2000000, 0, 0],
+      "Scale": [22000, 22000, 22000],
+      "Properties": {
+        "SurfaceGravityScale": 1.0,
+        "MaxInfluenceDistanceMultiplier": 8,
+        "PlanetName": "Terra Nova"
+      }
     }
   ]
 }
 ```
 
-- **Class** – C++ class path (e.g. `/Script/ModuleName.ClassName`). Blueprint classes can use their asset path.
-- **Location** – [X, Y, Z] in world units.
-- **Rotation** – [Pitch, Yaw, Roll] in degrees (optional; default 0).
-- **Scale** – [X, Y, Z] or [S] for uniform scale (optional; default 1).
-- **Properties** – (optional) Object of property names to values, applied to the spawned actor via reflection. Works for **any** actor type. Supported: numbers, bools, strings, and asset path strings (for UObject* properties). Example: `"Properties": { "StarMesh": "/Engine/BasicShapes/Shape_Sphere.Shape_Sphere", "StarCount": 5000 }`.
-- **StarMesh** – (optional) Shorthand for `AGalaxyStarField`; same as putting in Properties.
-- **StarMaterial** – (optional) Shorthand for `AGalaxyStarField`; same as putting in Properties.
-- **Defaults** – (optional) Root-level object. `Defaults.Properties` is applied to every actor first; each actor's Properties override. If present, `Defaults.StarMesh` and `Defaults.StarMaterial` apply to all `AGalaxyStarField` entries that don't set their own. `Defaults.FloorRadius` (number) sets the floor scale for `StaticMeshActor` entries (e.g. Small Planet preset): radius = half-extent in X/Y; scale becomes [Radius/50, Radius/50, 0.2].
+---
 
-**Steps for AI/agents:**
+## Spherical Quadtree LOD (To Be Implemented)
 
-1. Add or edit a JSON file in `Config/PlacementData/` (e.g. copy `GalaxyMapTest.json` and modify, or create `MyPreset.json`).
-2. User (or automated run) opens the level in the editor and runs **Place Actors From Data** → choose the preset (e.g. **GalaxyMapTest**, **MilkyWaySkybox**).
-3. Actors are spawned; level is marked dirty. Save the level to persist.
+**Status: Not yet implemented. Designed here for implementation.**
 
-**GalaxyStarField visibility:** Placed `AGalaxyStarField` actors get a default star mesh and material with **zero manual steps**. If `/Game/Federation/Materials/M_GalaxyStar` does not exist, the spawner creates and saves a simple emissive material there on first use, so the mesh always appears. For the **full galaxy look** (star color variation from temperature), use a material that reads **Per Instance Custom Data** (4 floats: R, G, B, Intensity) and save it as `Content/Federation/Materials/M_GalaxyStar`; the spawner will then use that instead. Or set `Defaults.StarMaterial` in JSON to any asset path.
+### Core Concept
 
-The **Properties** block works generically for any actor: set any UPROPERTY(EditAnywhere) by name (numbers, bools, strings, asset paths). To support new property types (e.g. FVector from arrays), extend `ApplyPropertiesFromJson` in `Source/federationEditor/PlaceActorsFromDataCommand.cpp`.
+The planet surface is represented as a **cube-sphere**: a unit cube projected onto a unit sphere, with each of the six cube faces subdivided as a quadtree. This is the standard approach used by Elite Dangerous, Outerra, and Star Citizen.
 
-**Skybox (Milky Way):** `ASkySphere` is a large sphere actor used as a skybox. Use **Place Actors From Data → MilkyWaySkybox** to add it (scale 5000 at origin). By default it uses a fallback material (`M_GalaxyStar` or engine default). For a Milky Way look: (1) Download a free equirectangular panorama (e.g. **NASA SVS GLIMPSE 360** – spitzer.caltech.edu/explore/glimpse360 – or **NOIRLab Milky Way Over Maunakea** – noirlab.edu, CC0); (2) Import the image as a texture in Content; (3) Create a material (Unlit, **Two Sided**), sample the texture and connect to Emissive Color; (4) In `Config/PlacementData/MilkyWaySkybox.json` add `"Properties": { "SkyMaterial": "/Game/Federation/Materials/M_YourSkybox.M_YourSkybox" }` to the SkySphere entry, or set the material on the placed actor in the editor.
+```
+LOD 0: 6 faces, each ~1/6 of sphere surface — visible from deep space
+LOD 5: 6 × 4^5 = 6144 chunks — continental scale
+LOD 12: planet-surface walking scale (~500m patches)
+LOD 20+: 1m resolution terrain
+```
 
-### Scalable universe placement strategy
+Streaming is driven by **solid angle from the camera**, not flat Euclidean distance — a chunk at 45° from the camera direction is less important than one directly ahead regardless of absolute distance.
 
-| Source of content | How to manage |
-|-------------------|----------------|
-| **Handcrafted** | Few key locations: place via a preset in Config/PlacementData/ or one-off sublevels; stream in with World Partition. |
-| **Random** | Use a seed in data or generator params; same data = same layout. Store seeds in JSON or DataTable. |
-| **Procedural** | Generator actors (e.g. `AGalaxyStarField`) read parameters from data; each placement JSON defines which generators exist and where, plus params (StarCount, GalaxyRadius, etc.). Extend the JSON schema and spawner to set these when spawning. |
+### Implementation Class (Planned)
 
-One scalable approach: keep **placement presets** in Config/PlacementData/ (e.g. GalaxyMapTest.json, MilkyWaySkybox.json, or custom presets). Each JSON lists "root" actors (galaxy generators, system markers, hand-placed heroes). The editor command lists all presets; choose one to spawn that set of actors so the level matches the data.
+`USphericalQuadtreeLOD` — a custom `UActorComponent` on `APlanet` that:
+1. Maintains a 6-face quadtree of `FPlanetChunk` nodes
+2. Each frame, evaluates which chunks should be active based on camera direction and distance
+3. Subdivides/merges nodes asynchronously (async tasks for noise evaluation + mesh generation)
+4. Manages `UProceduralMeshComponent` instances per active leaf chunk
+
+### Terrain Generation
+
+Height data is evaluated in **planet-local spherical coordinates** (cube face UV → sphere normal → noise evaluation). This prevents seams at cube face boundaries and allows deterministic generation from a seed.
+
+Triplanar texturing is used at the surface level — materials sample textures based on world-space normal so they tile correctly regardless of the projection.
+
+### Actor Placement on a Sphere
+
+For any actor placed on a planet surface:
+
+```
+SurfaceUp = normalize(ActorWorldPosition - PlanetCenter)
+TangentX = cross(SurfaceUp, WorldUp).normalize()
+TangentY = cross(SurfaceUp, TangentX)
+```
+
+This gives a local frame where "up" is the radial direction from the planet core. Cities, forests, structures — all use this frame. `UPlanetGravityComponent` already implements this via `GetGravityUp()`.
+
+### Chunk Lifecycle
+
+```
+Needed → AsyncTask: evaluate noise for chunk region
+       → AsyncTask: build mesh geometry (vertices, normals, UVs)
+       → Main thread: create UProceduralMeshComponent, upload
+       → Show chunk, hide parent
+
+No longer needed → Hide chunk, destroy component, return to pool
+```
+
+Neighbor stitching uses **skirts** (extend chunk edges downward by terrain height delta) to hide T-junction gaps at LOD boundaries without complex vertex morphing.
 
 ---
 
-## Summary for AI
+## Depth Buffer Management
 
-- **Galaxy scale:** Procedural generation + World Partition + LWC. Don't hand-place.
-- **Hybrid architecture:** Main WP level (`DeepSpace`) for space. Separate streaming levels per planet surface, loaded/unloaded via `UPlanetSurfaceStreamer`. This replaced the earlier "one WP for everything" approach.
-- **Planet surfaces:** Each planet sphere has a `UPlanetSurfaceStreamer` component. Set `SurfaceLevelPath` to the surface level's package name. Gravity switches from radial (space) to standard downward (surface) on transition.
-- **Asset safety rule:** Never modify `/Engine/...` assets directly. Always duplicate/create project assets under `/Game/...` (for example `Content/Federation/Materials/`) first, then version control those project assets before wiring gameplay/runtime logic to them.
-- **Placing actors:** Add or edit JSON in `Config/PlacementData/`, then run **Place Actors From Data** → choose the preset (Level Editor toolbar or **Tools → Federation**). AI edits the JSON files and spawner code; a human (or automation) runs the chosen preset. See format above.
-- **Stress testing:** `APlanetSurfaceStressTest` scatters instanced meshes for benchmarking. Console: `Fed.StressTest.SetCount <N>`.
-- **Your role:** Run the editor command after data changes; placement is repeatable and AI-friendly.
+At solar system scale, a single depth frustum cannot handle both a spaceship 10m from the camera and a planet 10,000 km away without Z-fighting.
+
+**Solution: Dual-frustum rendering (to be implemented)**
+
+1. **Pre-pass (space backdrop):** Render stars, distant planets (as low-poly spheres with baked normal maps), and other far-field objects with a very large far clip. These do not compete with the local depth buffer.
+2. **Main pass (local scene):** Render the ship, nearby terrain, characters, and all interactive content with a tight near/far appropriate to the current situation (on surface: 0.1m–50km; in orbit: 1m–500km).
+
+The depth buffer is cleared between passes. No logarithmic depth buffer modification to the UE5 engine is required. This is the same approach used by Cesium for Unreal.
+
+---
+
+## Gravity System
+
+Gravity is **always radial** — there is no "flat mode", no world-down gravity, and no blending between the two. The player always experiences gravity pointing toward the nearest planet's center.
+
+### Components
+
+**`UPlanetGravitySourceComponent`** (`Source/federation/Planet/PlanetGravitySourceComponent.h`) — on each `APlanet`:
+- `SurfaceGravityScale` — gravity strength at planet surface (1.0 = Earth-like)
+- `FalloffExponent` — power law falloff (default 2.0 = inverse-square)
+- `MaxInfluenceDistanceMultiplier` — cutoff distance as multiple of planet radius
+- `ManualRadius` — override auto-derived radius
+
+**`UPlanetGravityComponent`** (`Source/federation/Planet/PlanetGravityComponent.h`) — on the player character:
+- Iterates all `UPlanetGravitySourceComponent` actors each tick
+- Computes weighted radial gravity direction from all sources in range
+- Sets `CharacterMovementComponent::SetGravityDirection()` and `GravityScale`
+- Drives capsule alignment to the gravity "up" direction
+- Drives camera orientation via quaternion (no Euler round-trip)
+- Handles look input relative to the gravity frame
+- Recovers ground contact on curved surfaces (line trace against gravity direction)
+
+Gravity is multi-planet capable — between two planets, gravity is a weighted blend that smoothly transitions as the player moves.
+
+---
+
+## Day/Night Cycle
+
+**Planets do not rotate.** The sun (a `UDirectionalLightComponent` at solar system scale) orbits around the solar system. This is equivalent to planet rotation from the player's perspective and is the same approach used by No Man's Sky.
+
+Benefits:
+- Zero engineering complexity — no actor transforms updated each frame
+- No navigational confusion from rotating landmarks
+- Day/night cycle length is trivially configurable
+- The sun is a real light source at real distance
+
+**Status: Not yet implemented.** Currently no day/night system exists; lighting is static.
+
+---
+
+## Performance Strategy
+
+### Tick Budget
+
+- All static actors: `bCanEverTick = false`. Planets, terrain chunks, buildings, trees — no tick.
+- `UPlanetGravityComponent` ticks for the player only.
+- Quadtree LOD evaluation runs on background task threads, not the game thread.
+
+### Actor Population
+
+- **Mass Entity (UE5 ECS)** for large homogeneous populations: asteroid fields, enemy fleets, wildlife herds. Mass Entity bypasses per-actor tick entirely.
+- **Nanite** for all authored static surface props (rocks, ruins, buildings).
+- **`UProceduralMeshComponent`** for runtime-generated terrain chunks (does not support Nanite — pre-baking as static meshes for Nanite is a future optimization).
+
+### Per-Planet Detail Budget
+
+At any moment, **only one planet's surface** has full terrain LOD active. Other planets are low-poly sphere meshes with baked normal map textures, switched to full LOD when the player enters their sphere of influence at close range.
+
+### World Partition
+
+World Partition is **not used for planet surfaces** (it assumes a flat 2D grid). World Partition may be used for authored flat environments (space stations, asteroid base interiors).
+
+---
+
+## AI Agent Actor Placement Workflow
+
+Actors are placed in levels via JSON placement data in `Config/PlacementData/`. Run via **Tools → Federation → Place Actors From Data** in the UE5 editor.
+
+```json
+{
+  "Actors": [
+    {
+      "Class": "/Script/federation.ClassName",
+      "Location": [X, Y, Z],
+      "Rotation": [Pitch, Yaw, Roll],
+      "Scale": [SX, SY, SZ],
+      "Properties": {
+        "UPROPERTY_Name": value
+      }
+    }
+  ]
+}
+```
+
+Properties are applied generically across all components via reflection. Any `UPROPERTY` on the actor or its components can be set this way.
+
+---
+
+## Implementation Roadmap
+
+In priority order:
+
+1. **Origin rebasing at runtime** (`UWorld::SetNewWorldOrigin()` when player drifts >10km from origin)
+2. **Spherical quadtree LOD** — `USphericalQuadtreeLOD` component, cube-sphere quadtree, async chunk generation
+3. **Gravity extended to all surface actors** — NPCs, vehicles, dropped items
+4. **Procedural terrain noise** — height + biome functions, seeded deterministically from planet parameters
+5. **Streaming manager** — chunk priority, async task scheduling, memory budget
+6. **PCG surface population** — forests, rocks, props on sphere using surface normal as "up"
+7. **Atmospheric effects** — scattering, clouds, weather by altitude
+8. **Dual-frustum depth rendering** — space backdrop pre-pass, local scene main pass
+9. **Sun orbit system** — directional light rotation, day/night cycle
+
+---
+
+## Tests
+
+| Test suite | Location |
+|-----------|----------|
+| Planet gravity component | `Source/federation/Tests/Planet/Test_PlanetGravityComponent.cpp` |
+| Planet gravity source | `Source/federation/Tests/Planet/Test_PlanetGravitySourceComponent.cpp` |
+| Large world coordinates | `Source/federation/Tests/Core/Test_LargeWorldCoordinates.cpp` |
+
+Run via UE5 Session Frontend → Automation.

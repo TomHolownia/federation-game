@@ -2,7 +2,6 @@
 
 #include "Planet/Planet.h"
 #include "Planet/PlanetGravitySourceComponent.h"
-#include "Planet/PlanetSurfaceStreamer.h"
 #include "Navigation/WaypointComponent.h"
 #include "Navigation/WaypointTypes.h"
 #include "Components/StaticMeshComponent.h"
@@ -12,15 +11,11 @@ APlanet::APlanet(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	Tags.AddUnique(FName(TEXT("Planet")));
-	PlanetSurfaceStreamer = CreateDefaultSubobject<UPlanetSurfaceStreamer>(TEXT("PlanetSurfaceStreamer"));
 	PlanetGravitySource = CreateDefaultSubobject<UPlanetGravitySourceComponent>(TEXT("PlanetGravitySource"));
 
 	WaypointComp = CreateDefaultSubobject<UWaypointComponent>(TEXT("Waypoint"));
 	WaypointComp->WaypointType = EWaypointType::Planet;
 	WaypointComp->DisplayName = FText::FromString(TEXT("Unknown Planet"));
-
-	// Use adaptive streaming/handoff radius by default (0 = use planet size + approach speed).
-	PlanetSurfaceStreamer->StreamingRadius = 0.f;
 
 	// Ensure APlanet has a sphere visual even when placement data omits/invalidates mesh path.
 	if (UStaticMeshComponent* SMComp = GetStaticMeshComponent())

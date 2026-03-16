@@ -16,11 +16,6 @@ UPlanetGravityComponent::UPlanetGravityComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
-void UPlanetGravityComponent::SetSurfaceBlendAlpha(float InAlpha)
-{
-	SurfaceBlendAlpha = FMath::Clamp(InAlpha, 0.f, 1.f);
-}
-
 void UPlanetGravityComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -188,16 +183,7 @@ void UPlanetGravityComponent::UpdatePlanetGravity()
 		return;
 	}
 
-	FVector Dir = WeightedGravity.GetSafeNormal();
-	if (SurfaceBlendAlpha > 0.f)
-	{
-		// Blend from radial gravity to world-down near surface transitions.
-		Dir = FMath::Lerp(Dir, FVector::DownVector, SurfaceBlendAlpha).GetSafeNormal();
-		if (Dir.IsNearlyZero())
-		{
-			Dir = FVector::DownVector;
-		}
-	}
+	const FVector Dir = WeightedGravity.GetSafeNormal();
 	if (CMC)
 	{
 		CMC->SetGravityDirection(Dir);
@@ -222,7 +208,6 @@ void UPlanetGravityComponent::UpdateGravityAlignment(float DeltaTime)
 {
 	UCharacterMovementComponent* CMC = GetOwnerCMC();
 	if (CMC && CMC->MovementMode == MOVE_Flying) return; // Don't align when jetpacking in space
-	if (SurfaceBlendAlpha >= 0.5f) return;
 	if (!bAlignToGravity) return;
 	if (GravityDir.IsNearlyZero()) return;
 
@@ -279,7 +264,7 @@ void UPlanetGravityComponent::UpdateCameraOrientation()
 		return;
 	}
 
-	const bool bGravityActive = bUseGravityRelativeLook && bAlignToGravity && !GravityDir.IsNearlyZero() && SurfaceBlendAlpha < 0.5f;
+	const bool bGravityActive = bUseGravityRelativeLook && bAlignToGravity && !GravityDir.IsNearlyZero();
 	if (!bGravityActive)
 	{
 		if (ThirdPersonSpringArm)

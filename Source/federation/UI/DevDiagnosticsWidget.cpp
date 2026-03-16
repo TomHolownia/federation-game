@@ -72,8 +72,6 @@ void UDevDiagnosticsWidget::BuildWidgetTree()
 	};
 
 	MakeLine(SpeedText, TEXT("Speed: 0"));
-	MakeLine(LevelText, TEXT("Level: ?"));
-	MakeLine(StreamText, TEXT("Stream: -"));
 	MakeLine(JetpackEnabledText, TEXT("Jetpack: False"));
 	MakeLine(JetpackBoostText, TEXT("Boost: False"));
 }
@@ -95,25 +93,6 @@ void UDevDiagnosticsWidget::NativeTick(const FGeometry& MyGeometry, float InDelt
 	UWorld* World = GetWorld();
 	AFederationGameState* GS = World ? World->GetGameState<AFederationGameState>() : nullptr;
 	if (!GS) return;
-
-	if (LevelText)
-	{
-		FString LevelStr;
-		if (GS->DebugStreamingState == TEXT("Idle")) LevelStr = TEXT("Deep Space");
-		else if (GS->DebugStreamingState == TEXT("Loading")) LevelStr = TEXT("Transitioning level");
-		else if (GS->DebugStreamingState == TEXT("OnSurface")) LevelStr = TEXT("Planet surface");
-		else if (GS->DebugStreamingState == TEXT("Unloading")) LevelStr = TEXT("Leaving surface");
-		else LevelStr = GS->DebugStreamingState;
-		LevelText->SetText(FText::FromString(FString::Printf(TEXT("Level: %s"), *LevelStr)));
-	}
-
-	if (StreamText)
-	{
-		StreamText->SetText(FText::FromString(
-			GS->DebugStreamingLevelName.IsEmpty()
-				? TEXT("Stream: -")
-				: FString::Printf(TEXT("Stream: %s"), *GS->DebugStreamingLevelName)));
-	}
 
 	if (JetpackEnabledText)
 	{

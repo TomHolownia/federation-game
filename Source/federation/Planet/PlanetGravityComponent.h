@@ -66,12 +66,6 @@ public:
 	FVector GetGravityDirection() const { return GravityDir; }
 
 	UFUNCTION(BlueprintCallable, Category = "Gravity")
-	void SetSurfaceBlendAlpha(float InAlpha);
-
-	UFUNCTION(BlueprintCallable, Category = "Gravity")
-	float GetSurfaceBlendAlpha() const { return SurfaceBlendAlpha; }
-
-	UFUNCTION(BlueprintCallable, Category = "Gravity")
 	FVector GetGravityUp() const { return GravityDir.IsNearlyZero() ? FVector::UpVector : (-GravityDir).GetSafeNormal(); }
 
 	FVector GetViewTangentForward() const { return ViewTangentForward; }
@@ -93,7 +87,6 @@ public:
 	FVector ViewTangentForward = FVector::ForwardVector;
 	bool bViewInitialized = false;
 	float ViewPitchRad = 0.f;
-	float SurfaceBlendAlpha = 0.f;
 	float LastComputedGravityScale = 1.f;
 
 private:
